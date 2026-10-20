@@ -17,6 +17,8 @@ RUN groupadd --gid 1000 app \
 COPY main.py cli.py config.py ./
 COPY app/ ./app/
 COPY registrar/ ./registrar/
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
 
 USER app
 

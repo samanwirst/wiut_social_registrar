@@ -28,6 +28,9 @@ class Student:
     account: str = ""
     email_addresses: list[str] = field(default_factory=list)
     source: str = "microsoft_graph"
+    graph_id: str = ""
+    given_name: str = ""
+    surname: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -15,7 +15,7 @@ from .models import EMAIL_PATTERN, Student, validate_message, validate_student_i
 
 logger = logging.getLogger("registrar.graph")
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
-PROFILE_FIELDS = "displayName,mail,userPrincipalName"
+PROFILE_FIELDS = "id,displayName,givenName,surname,mail,userPrincipalName"
 
 
 class GraphClient:
@@ -144,7 +144,9 @@ class GraphClient:
         if not isinstance(email, str) or not EMAIL_PATTERN.fullmatch(email):
             raise GraphError("Microsoft Graph did not return a valid student email address.")
         student = Student(student_id, data.get("displayName") or "", email, account=upn,
-                          email_addresses=list(dict.fromkeys([email, upn])), source="microsoft_graph")
+                          email_addresses=list(dict.fromkeys([email, upn])), source="microsoft_graph",
+                          graph_id=data.get("id") or "", given_name=data.get("givenName") or "",
+                          surname=data.get("surname") or "")
         if len(self._students) >= 256:
             self._students.pop(next(iter(self._students)))
         self._students[student_id] = (time.monotonic() + self.settings.cache_ttl, student)

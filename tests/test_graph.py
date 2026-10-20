@@ -38,12 +38,13 @@ def test_exact_lookup_caches_profile_and_student_and_reuses_session(client, capl
         "student_id": "00000001", "name": "Student", "email": "student@students.example.test",
         "account": "00000001@example.test", "email_addresses": ["student@students.example.test", "00000001@example.test"],
         "source": "microsoft_graph",
+        "graph_id": "", "given_name": "", "surname": "",
     }
     calls = client.session.request.call_args_list
     assert len(calls) == 2
     assert calls[0].args == ("GET", "https://graph.microsoft.com/v1.0/me")
     assert calls[1].args == ("GET", "https://graph.microsoft.com/v1.0/users/00000001%40example.test")
-    assert calls[1].kwargs["params"] == {"$select": "displayName,mail,userPrincipalName"}
+    assert calls[1].kwargs["params"] == {"$select": "id,displayName,givenName,surname,mail,userPrincipalName"}
     assert calls[1].kwargs["allow_redirects"] is False
     assert calls[1].kwargs["timeout"] == (5, 15)
     assert "SENT GET" in caplog.text and "HTTP 200" in caplog.text and "CACHE" in caplog.text

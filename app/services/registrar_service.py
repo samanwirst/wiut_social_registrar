@@ -11,7 +11,7 @@ from registrar.models import Student, validate_student_id
 
 
 class RegistrarService:
-    """Read-only async adapter; one worker owns the Graph session and MSAL cache."""
+    """One worker owns the Graph session and MSAL cache."""
 
     def __init__(self, settings: Settings):
         auth = TokenProvider(settings, status=lambda _: None, interactive=False)
@@ -28,9 +28,18 @@ class RegistrarService:
     async def check_connection(self) -> None:
         await self._call(self._client.profile)
 
-    async def find_student(self, student_id: str) -> Student | None:
+    async def find_student(self, student_id: str, *, refresh: bool = False) -> Student | None:
         student_id = validate_student_id(student_id)
-        return await self._call(self._client.find_student, student_id)
+        return await self._call(partial(self._client.find_student, refresh=refresh), student_id)
+
+    async def send_verification_code(self, student: Student, code: str, ttl_seconds: int) -> None:
+        # Only this fixed template is exposed to the bot; callers cannot supply mail content.
+        body = (f"Your WIUT Social Registrar verification code is:\n\n{code}\n\n"
+                f"Student ID: {student.student_id}\n"
+                f"This code expires in {ttl_seconds // 60} minutes and can only be used once.\n"
+                "Enter it in the Telegram bot where you requested registration.\n"
+                "If you did not request this code, you can ignore this email.")
+        await self._call(self._client.send_email, student, "WIUT Social Registrar verification code", body)
 
     async def close(self) -> None:
         if self._closed:
