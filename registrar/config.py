@@ -78,7 +78,7 @@ class Settings:
                 raise ValueError
             return serialized
         except (ValueError, TypeError):
-            raise ConfigurationError("The token cache in .env is corrupted. Run main.py --login.") from None
+            raise ConfigurationError("The token cache in .env is corrupted. Run cli.py --login.") from None
 
     def save_cache(self, serialized: str | None) -> None:
         encoded = base64.b64encode(serialized.encode()).decode() if serialized else ""

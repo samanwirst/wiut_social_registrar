@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-import main as cli
+import cli
 from registrar.errors import GraphError
 from registrar.models import Student
 

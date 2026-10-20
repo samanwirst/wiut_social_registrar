@@ -74,6 +74,17 @@ def test_failed_refresh_does_not_start_interactive_flow(provider):
     app.initiate_device_flow.assert_not_called()
 
 
+def test_noninteractive_auth_never_starts_device_flow(provider):
+    auth, app, status = provider
+    auth.interactive = False
+    app.get_accounts.return_value = []
+    with pytest.raises(AuthenticationError, match="cli.py --login"):
+        auth.get_token()
+    app.initiate_device_flow.assert_not_called()
+    app.acquire_token_by_device_flow.assert_not_called()
+    status.assert_not_called()
+
+
 def test_auth_network_failure_hides_transport_details(provider):
     auth, app, _ = provider
     app.acquire_token_silent.side_effect = requests.ConnectionError("secret-in-url")

@@ -1,83 +1,224 @@
 # WIUT Social Registrar
 
-A console tool for looking up students by ID, retrieving their name, email address, and account, and sending them email from your account. It uses the official Microsoft Graph v1.0 API and MSAL Python for authentication. Requests share a single `requests` HTTP session; browser automation is no longer required.
+A public Telegram bot that looks up a student by ID and returns their name, email address, and account. Send an ID as text or use `/find STUDENT_ID`. The bot uses aiogram 3 and Microsoft Graph v1.0 with MSAL authentication.
 
-Sign-in and student profile lookup have been verified with the current account. The delegated permissions `User.Read`, `User.ReadBasic.All`, and `Mail.Send` were granted through user consent, without requesting approval from a university administrator. Email submission is tested with a mocked HTTP transport; no real test emails were sent.
+Telegram users can only look up profiles. The Graph core also provides local console tools for email previews and explicit email submission.
 
-## Getting started
+## Before you start
 
-Requires Python 3.11+.
+You need:
+
+- Docker Engine with Docker Compose v2+, or Docker Desktop. Python is installed inside the image.
+- A Telegram bot token from [BotFather](https://t.me/BotFather).
+- A work or school Microsoft account and a Microsoft Entra public-client application in its tenant. Your tenant must allow the required app registration and delegated user consent.
+- Outbound HTTPS access to Telegram, Microsoft sign-in, and Microsoft Graph. No inbound ports, domain, or database are required.
+
+Download and extract the project archive, or clone the repository:
+
+```bash
+git clone --branch dev https://github.com/samanwirst/wiut_social_registrar.git
+cd wiut_social_registrar
+```
+
+Run the commands below from the project directory. Shell examples use Linux/macOS or WSL on Windows.
+
+## Configure Microsoft sign-in
+
+For a new deployment, create your own application:
+
+1. Open the [Microsoft Entra admin center](https://entra.microsoft.com/) and go to **App registrations > New registration**.
+2. Enter an application name and select **Accounts in this organizational directory only**.
+3. Copy the **Application (client) ID** and **Directory (tenant) ID** from the application overview.
+4. Open **Authentication** and enable **Allow public client flows**, then save. Device-code authentication does not require a redirect URI or client secret.
+5. During the first console sign-in, grant the delegated scopes requested by the core: `User.Read`, `User.ReadBasic.All`, and `Mail.Send`. The Telegram interface exposes profile lookup only.
+
+The account used here could grant these permissions through user consent. Other tenants can have different policies. If registration or consent is blocked, the application cannot complete sign-in until the required access is available.
+
+Microsoft's instructions: [configure a public-client application](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-app-configuration).
+
+## Docker quick start
+
+### 1. Create your private configuration
+
+```bash
+mkdir -p .local
+test -f .local/.env || cp .env.example .local/.env
+chmod 700 .local
+chmod 600 .local/.env
+```
+
+Edit **`.local/.env`** and fill in:
+
+```dotenv
+TELEGRAM_BOT_TOKEN=your-bot-token
+GRAPH_CLIENT_ID=your-application-client-id
+GRAPH_TENANT_ID=your-directory-tenant-id
+```
+
+These are placeholders; replace them with your own values. Leave `GRAPH_TOKEN_CACHE_B64` empty on the first run. Optionally set `GRAPH_ACCOUNT` to your sign-in UPN, such as `00000000@university.edu`.
+
+If you already have a working project-root `.env`, you can copy it to `.local/.env` instead of starting from the template. Docker reads `.local/.env`; local Python commands read the project-root `.env` by default. Both locations are excluded from Git and Docker builds.
+
+### 2. Set the container's file ownership and build
+
+On Linux/macOS, set these variables in the terminal where you run Compose:
+
+```bash
+export APP_UID="$(id -u)"
+export APP_GID="$(id -g)"
+docker compose build bot
+```
+
+Repeat the two exports in a new terminal. Compose defaults to UID/GID `1000:1000` if they are unset. Matching your host user allows the container to update the private configuration without changing its ownership.
+
+### 3. Sign in to Outlook
+
+Run this once for a new configuration, or when Microsoft requires reauthentication:
+
+```bash
+docker compose run --rm bot python cli.py --env-file /config/.env --login
+```
+
+MSAL prints an official Microsoft verification URL and a one-time code. Open the URL in your normal browser, enter the code, select your account, and complete sign-in and consent. No browser is needed inside the container.
+
+The renewable MSAL cache is saved automatically to `.local/.env`. The bot refreshes tokens silently and never sends sign-in codes to Telegram users.
+
+### 4. Check and start the bot
+
+```bash
+docker compose run --rm bot python main.py --env-file /config/.env --check
+docker compose up -d bot
+docker compose logs --tail=50 -f bot
+```
+
+The check verifies Telegram and Outlook, then exits without consuming Telegram updates. Open your bot in Telegram, send `/start`, then a student ID such as `00000001`. `/find 00000001` and `/help` are also supported. Leading zeroes are preserved.
+
+### Everyday commands
+
+```bash
+docker compose ps                       # Container status
+docker compose logs --tail=100 bot      # Recent logs
+docker compose stop bot                # Stop before reauthentication or console use
+docker compose up -d bot                # Start again
+docker compose up -d --build bot        # Rebuild after updating the source
+docker compose down                    # Remove the container and project network
+```
+
+`.local/.env` stays on the host across container restarts, rebuilds, and `docker compose down`. Back up this file privately if moving the deployment. Base64 encoding does not encrypt the token cache.
+
+Use one process per configuration file and one polling instance per Telegram token. Stop the bot before running console commands against the same `.env`, then start it again. Configuration changes are read when a process starts.
+
+## Why configuration is mounted as a directory
+
+Compose mounts `.local/` at `/config/` with write access. The rest of the container filesystem is read-only. MSAL cache persistence replaces `.env` atomically, so mounting just the file would prevent reliable updates. The source `.env` is read by Python directly, rather than injected as container environment variables, so a stale environment value cannot override a refreshed token cache.
+
+The image runs as an unprivileged user. `.dockerignore` excludes credentials, local runtime data, Git metadata, and virtual environments. The runtime image contains only application code and production dependencies. The bot uses long polling and publishes no ports.
+
+Docker references: [bind mounts](https://docs.docker.com/engine/storage/bind-mounts/), [Compose services](https://docs.docker.com/reference/compose-file/services/).
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| Missing bind source directory | Create `.local/` and `.local/.env` before using Compose. |
+| Permission denied while saving the cache | Export `APP_UID` and `APP_GID` as shown above; ensure your user owns `.local/` and its `.env`. |
+| Invalid Telegram token | Correct `TELEGRAM_BOT_TOKEN` in `.local/.env`, then restart the bot. |
+| Outlook sign-in required or token cache corrupted | Stop the bot, run the console login command again, then start it. |
+| A Telegram webhook is configured | Disable the existing webhook before using long polling. The bot leaves existing webhook settings intact. |
+| Telegram polling conflict | Stop the other instance using the same bot token. |
+| Microsoft Graph returns HTTP 403 | Check the signed-in account, delegated consent, and tenant policies. |
+| Student not found | Check the full ID, including leading zeroes, and `GRAPH_STUDENT_DOMAIN`. |
+
+## Run without Docker
+
+Requires Python 3.11+. Python 3.12 is used in the Docker image.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-# For a new installation only: configure the application in .env.
 test -f .env || cp .env.example .env
 chmod 600 .env
+```
+
+Fill in the project-root `.env`, then run:
+
+```bash
+python cli.py --login
+python main.py --check
 python main.py
 ```
 
-The application and sign-in are already configured in `.env` in this working copy. By default, the program prompts for student IDs in the terminal. A blank line or EOF exits the program. Leading zeroes are preserved. The first request reads your profile, then retrieves the student by their exact `userPrincipalName`, such as `00025208@wiut.uz`. This avoids ambiguity when selecting the first search result.
+Use `--env-file PATH` to select another configuration file. `python main.py --debug` enables Graph request methods, paths, HTTP status codes, timings, and cache hits. Tokens, authorization headers, and full error responses are excluded from logs.
 
-## Commands
-
-```bash
-python main.py                           # Enter student IDs interactively
-python main.py --id 00025208              # Look up one profile
-python main.py --id 00025208 --json       # JSON output for another script
-python main.py --debug                    # Method, path, HTTP status, timing, cache hits
-python main.py --login                    # Sign in again
-python main.py --logout                   # Clear the local token cache
-python main.py --env-file /path/to/.env
-```
-
-When sign-in is required, MSAL displays an official Microsoft URL and a one-time code. Open the URL in your browser, enter the code, and confirm sign-in to `WIUT Social Registrar`. The program never receives your password. MSAL refreshes tokens automatically.
-
-Preview an email:
+## Console tools and Graph core
 
 ```bash
-python main.py --id 00025208 --subject 'Email subject' --body 'Email body'
-python main.py --id 00025208 --subject 'Email subject' --body-file letter.txt
+python cli.py                             # Interactive student lookup
+python cli.py --id 00000001 --json         # One profile as JSON
+python cli.py --login                      # Sign in again
+python cli.py --logout                     # Remove the local token cache
+python cli.py --id 00000001 --subject 'Subject' --body 'Body'
 ```
 
-Add **`--send`** to either command to send the email. Body files must use UTF-8 encoding. The student's profile is fetched from Graph again before sending. Emails are submitted through `/me/sendMail` from the signed-in account and saved in Sent Items. HTTP 202 means Microsoft accepted the email for sending; it does not confirm delivery. Submission is never retried automatically after a timeout or an ambiguous error: check Sent Items first.
+The last command previews an email. Add `--send` to submit it explicitly, or use `--body-file letter.txt` for UTF-8 text. These email tools are available only through the local console, not Telegram. Inside Docker, use the same commands with `docker compose run --rm bot python cli.py --env-file /config/.env` and stop the bot first.
 
-The `--json` result contains `student_id`, `name`, `email`, `account`, `email_addresses`, and `source`. For emails, it also includes `message` with the sender, recipient, subject, body, and a status of `preview` or `accepted`. A missing student is represented as `null`. Results go to stdout; sign-in messages and network logs go to stderr. Authorization headers, tokens, and full error responses are excluded from logs.
+Microsoft Graph sends email from the signed-in account through `/me/sendMail` and saves it in Sent Items. HTTP 202 confirms acceptance for sending, not delivery. Ambiguous submission failures are never retried automatically; check Sent Items before resubmitting.
 
-Exit codes: `0` for success or a completed interactive session; `1` when no student is found; `2` for an error; `130` for Ctrl+C. HTTP 403 and network errors are reported as errors, not as missing students.
+Lookup JSON contains `student_id`, `name`, `email`, `account`, `email_addresses`, and `source`. A missing student is `null`. Results go to stdout; diagnostics go to stderr. Console exit codes are `0` for success, `1` for no matching student, `2` for an error, and `130` for Ctrl+C.
 
-## Core API
+`GraphClient.find_student()` returns a `Student` or `None` and raises `GraphError` on failure. Students are fetched by exact UPN, using the signed-in account's domain by default. Successful lookups are cached for 5 minutes, up to 256 entries. HTTP 403 and network errors are never reported as missing students.
 
-```python
-from registrar.config import Settings
-from registrar.graph import GraphClient
+## Configuration reference
 
-with GraphClient(Settings.load()) as client:
-    student = client.find_student("00025208")
-    if student:
-        print(student.to_dict())
-        print(client.mail_preview(student, "Subject", "Body"))
-        # Explicit submission: client.send_email(student, "Subject", "Body")
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Required for the bot | Token from BotFather. |
+| `GRAPH_CLIENT_ID` | Required | Your Entra application ID. |
+| `GRAPH_TENANT_ID` | `organizations` | Your tenant UUID, or organizational accounts. |
+| `GRAPH_ACCOUNT` | Empty | Optional sign-in UPN restriction. |
+| `GRAPH_STUDENT_DOMAIN` | Signed-in UPN domain | Student UPN domain override. |
+| `GRAPH_TIMEOUT_SECONDS` | `15` | HTTP read and authentication timeout. |
+| `GRAPH_CACHE_TTL_SECONDS` | `300` | Student profile cache lifetime. |
+| `GRAPH_DEBUG` | `false` | Graph request diagnostics. |
+| `GRAPH_TOKEN_CACHE_B64` | Empty | Secret MSAL cache, saved automatically after sign-in. |
+
+`APP_UID` and `APP_GID` are optional host environment variables used by Compose, not application credentials. Store deployment credentials and the MSAL cache in the private `.env` file. Passwords and client secrets are not stored.
+
+## Architecture
+
+The structure follows `referral_tgbot`: `BotApp`, separate handler routers, and a service injected through middleware.
+
+```text
+main.py                              # Telegram entry point
+config.py                            # Bot configuration
+app/bot.py                           # Bot, dispatcher, middleware, shutdown
+app/handlers/                        # /start, /help, /find, and plain ID input
+app/services/registrar_service.py    # Read-only async adapter to Graph
+cli.py                               # Local console tools and sign-in
+registrar/                           # Graph client, MSAL authentication, models
+Dockerfile                           # Runtime image and test target
+compose.yaml                         # Bot service and persistent configuration mount
+tests/                               # Tests with mocked Telegram and HTTP transports
 ```
 
-`find_student()` returns a `Student` or `None`, and raises `GraphError` on failure. The sender's profile is cached for the lifetime of the client. Student profiles are cached for 5 minutes, up to 256 entries. Repeated lookups use the cache without a network request. `refresh=True` fetches the student's profile again. GET requests receiving HTTP 429/503 honor `Retry-After` delays of up to 10 seconds, with at most three attempts. The core does not queue emails or automatically resubmit them.
+Synchronous Graph and MSAL operations share one background worker, keeping Telegram's event loop responsive and serializing HTTP session access and cache writes. The bot processes at most 16 updates concurrently and requires no database.
 
-## Application and configuration
+## Tests
 
-Settings are listed in [.env.example](.env.example). A new environment requires your own Microsoft Entra application: a single organizational tenant, a public client, and `Allow public client flows` enabled. No client secret is used. Copy `GRAPH_CLIENT_ID` and `GRAPH_TENANT_ID` from the application's overview page. Delegated permissions are requested dynamically during sign-in; the application does not use application permissions. Policies may differ for other accounts or tenants.
+Run tests in Docker without credentials:
 
-`GRAPH_ACCOUNT` restricts sign-in to the specified UPN. The student account domain is inferred from your account's UPN and can be overridden with `GRAPH_STUDENT_DOMAIN`. Configure the HTTP read timeout and student profile cache lifetime through `GRAPH_TIMEOUT_SECONDS` and `GRAPH_CACHE_TTL_SECONDS`.
+```bash
+docker build --target test -t wiut-social-registrar:test .
+```
 
-The MSAL cache, including refresh tokens, is stored in `GRAPH_TOKEN_CACHE_B64` inside `.env` with permissions set to `600`. The file is excluded from Git. Base64 does not encrypt secrets. Neither your Microsoft password nor a client secret is stored. `--logout` clears only the local cache. Use one process per `.env` file to avoid concurrent cache writes.
-
-## Testing
+Or use a local virtual environment:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Tests run without an account or network access. They cover exact student IDs, caching, errors and access restrictions, token refresh, private `.env` storage, console JSON output, previews, email submission, and prevention of retries when submission status is unknown.
+Tests cover Telegram routing, public lookup, missing students, validation, errors, background execution, token refresh, private cache persistence, and console email behavior. Telegram and Graph transports are mocked; tests send no real messages or emails.
 
-Microsoft documentation: [get a user](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0), [send email](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0), [authenticate with MSAL](https://learn.microsoft.com/en-us/entra/msal/python/getting-started/acquiring-tokens).
+The project is licensed under [GNU GPL v3](LICENSE).

@@ -14,9 +14,10 @@ SCOPES = ["User.Read", "User.ReadBasic.All", "Mail.Send"]
 class TokenProvider:
     """Microsoft's public-client flow, with its renewable cache kept in .env."""
 
-    def __init__(self, settings: Settings, status: Callable[[str], None]):
+    def __init__(self, settings: Settings, status: Callable[[str], None], *, interactive: bool = True):
         self.settings = settings
         self.status = status
+        self.interactive = interactive
         self.cache = msal.SerializableTokenCache()
         self.app = None
 
@@ -30,12 +31,13 @@ class TokenProvider:
             try:
                 self.cache.deserialize(self.settings.load_cache())
             except (ValueError, TypeError, KeyError):
-                raise AuthenticationError("The token cache is corrupted. Run main.py --login.") from None
+                raise AuthenticationError("The token cache is corrupted. Run cli.py --login.") from None
         self.app = msal.PublicClientApplication(
             self.settings.client_id,
             authority=f"https://login.microsoftonline.com/{self.settings.tenant_id}",
             token_cache=self.cache,
             enable_pii_log=False,
+            timeout=self.settings.timeout,
         )
 
     def _save(self):
@@ -53,13 +55,15 @@ class TokenProvider:
             self._initialize(reset=force)
             result = None if force else self._silent()
             if not result or "access_token" not in result:
+                if not self.interactive:
+                    raise AuthenticationError("Outlook sign-in is required. Run python cli.py --login on the bot host.")
                 flow = self.app.initiate_device_flow(scopes=SCOPES)
                 if "user_code" not in flow:
                     raise AuthenticationError("Microsoft did not allow sign-in. Check the application's public client settings.")
                 self.status(flow["message"])
                 result = self.app.acquire_token_by_device_flow(flow)
             if not result or "access_token" not in result:
-                raise AuthenticationError("Sign-in failed or permissions were not granted. Run main.py --login again.")
+                raise AuthenticationError("Sign-in failed or permissions were not granted. Run cli.py --login again.")
             return result["access_token"]
         except requests.RequestException:
             raise AuthenticationError("Could not connect to the Microsoft sign-in service.") from None
@@ -73,7 +77,7 @@ class TokenProvider:
             self._initialize()
             result = self._silent(refresh=True)
             if not result or "access_token" not in result:
-                raise AuthenticationError("Your Microsoft session has expired. Run main.py --login.")
+                raise AuthenticationError("Your Microsoft session has expired. Run cli.py --login.")
             return result["access_token"]
         except requests.RequestException:
             raise AuthenticationError("Could not refresh your Microsoft session.") from None

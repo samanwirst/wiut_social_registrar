@@ -1,99 +1,53 @@
 from __future__ import annotations
 
 import argparse
-import json
+import asyncio
 import logging
-import sys
 from pathlib import Path
 
-from registrar.config import ConfigurationError, Settings
+from aiogram.exceptions import TelegramAPIError
+
+from app.bot import BotApp
+from config import BotSettings
+from registrar.config import ConfigurationError
 from registrar.errors import GraphError
-from registrar.graph import GraphClient
-from registrar.models import validate_message, validate_student_id
+
+logger = logging.getLogger(__name__)
+
+
+async def run(settings: BotSettings, *, check: bool = False) -> None:
+    app = BotApp(settings)
+    try:
+        me = await app.check_connection()
+        logger.info("Telegram @%s and Outlook are connected.", me.username)
+        if not check:
+            await app.run()
+    finally:
+        await app.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Look up student profiles and send email from your account through Microsoft Graph.")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--id", metavar="STUDENT_ID", help="Look up one student ID, preserving leading zeroes.")
-    mode.add_argument("--login", action="store_true", help="Sign in to Microsoft again and save the token cache in .env.")
-    mode.add_argument("--logout", action="store_true", help="Remove the saved token cache from .env.")
-    parser.add_argument("--json", action="store_true", help="Output the --id result as JSON; status messages go to stderr.")
-    parser.add_argument("--debug", action="store_true", help="Show request methods, HTTP status codes, timings, and cache hits.")
-    parser.add_argument("--env-file", type=Path, help="Path to .env (defaults to the directory containing main.py).")
-    parser.add_argument("--subject", help="Email subject. Only a preview is shown unless --send is provided.")
-    body_input = parser.add_mutually_exclusive_group()
-    body_input.add_argument("--body", help="Email body text.")
-    body_input.add_argument("--body-file", type=Path, help="UTF-8 file containing the email body text.")
-    parser.add_argument("--send", action="store_true", help="Send the email to the student from your account.")
+    parser = argparse.ArgumentParser(description="Public Telegram bot for student profile lookup.")
+    parser.add_argument("--env-file", type=Path, help="Path to .env (defaults to the project directory).")
+    parser.add_argument("--check", action="store_true", help="Check Telegram and Outlook connections, then exit.")
+    parser.add_argument("--debug", action="store_true", help="Show Microsoft Graph request diagnostics.")
     args = parser.parse_args(argv)
-    if args.json and args.id is None:
-        parser.error("--json requires --id")
-    has_message = args.subject is not None or args.body is not None or args.body_file is not None or args.send
-    if has_message and (args.id is None or args.subject is None or (args.body is None and args.body_file is None)):
-        parser.error("email requires --id, --subject, and either --body or --body-file")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
-        if args.id is not None:
-            args.id = validate_student_id(args.id)
-        body = args.body_file.read_text(encoding="utf-8") if args.body_file is not None else args.body
-        if has_message:
-            validate_message(args.subject, body)
-        settings = Settings.load(args.env_file)
-        diagnostic_logger = logging.getLogger("registrar")
-        diagnostic_logger.setLevel(logging.DEBUG if args.debug or settings.debug else logging.WARNING)
-        diagnostic_logger.propagate = False
-        if not diagnostic_logger.handlers:
-            handler = logging.StreamHandler(sys.stderr)
-            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"))
-            diagnostic_logger.addHandler(handler)
-        if args.logout:
-            settings.save_cache(None)
-            print("Local token cache removed from .env.")
-            return 0
-        with GraphClient(settings, status=lambda message: print(message, file=sys.stderr)) as client:
-            if args.login:
-                profile = client.login(force=True)
-                print(f"Signed in as {profile.get('mail') or profile['userPrincipalName']}.")
-                return 0
-            if args.id is not None:
-                student = client.find_student(args.id, refresh=args.send)
-                result = student.to_dict() if student else None
-                message = None
-                if student and has_message:
-                    message = client.mail_preview(student, args.subject, body)
-                    if args.send:
-                        client.send_email(student, args.subject, body)
-                    message["status"] = "accepted" if args.send else "preview"
-                    result["message"] = message
-                if args.json:
-                    print(json.dumps(result, ensure_ascii=False, indent=2))
-                else:
-                    print(student.format() if student else "No student found with this ID.")
-                    if message:
-                        print(f"\nFrom: {message['from']}\nTo: {message['to']}\nSubject: {message['subject']}\n\n{message['body']}")
-                        print("\nMicrosoft accepted the email for sending." if args.send else "\nPreview only. Add --send to send the email.")
-                return 0 if student else 1
-            print("Enter a student ID. Leave blank to exit.")
-            while True:
-                try:
-                    student_id = input("\nStudent ID: ").strip()
-                except EOFError:
-                    break
-                if not student_id:
-                    break
-                try:
-                    student = client.find_student(validate_student_id(student_id))
-                    print(student.format() if student else "No student found with this ID.")
-                except ConfigurationError:
-                    raise
-                except (ValueError, GraphError) as error:
-                    print(str(error), file=sys.stderr)
+        settings = BotSettings.load(args.env_file)
+        logging.getLogger("registrar").setLevel(logging.DEBUG if args.debug or settings.graph.debug else logging.WARNING)
+        asyncio.run(run(settings, check=args.check))
         return 0
     except KeyboardInterrupt:
         return 130
-    except (ConfigurationError, GraphError, ValueError, OSError) as error:
-        print(str(error), file=sys.stderr)
-        return 2
+    except (ConfigurationError, GraphError) as error:
+        logger.error("%s", error)
+    except TelegramAPIError as error:
+        # Transport errors may include a URL containing the bot token.
+        logger.error("Telegram connection failed (%s). Check the token and network connection.", type(error).__name__)
+    except OSError:
+        logger.error("Could not access the configuration or network. Check file permissions and connectivity.")
+    return 2
 
 
 if __name__ == "__main__":
