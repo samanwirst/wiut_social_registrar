@@ -1,6 +1,8 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
+from aiogram.utils.formatting import Text
 
+from app.chat_formatting import student_profile
 from app.dialogs.messages import update_keyboard
 from app.dialogs.surveys import resume_survey
 from app.education import EDUCATION_LEVELS
@@ -15,6 +17,7 @@ async def choose_education(
     event_survey,
     mini_app_url="",
     can_open_panel=False,
+    command_menu=None,
 ):
     level = EDUCATION_LEVELS.get((callback.data or "").removeprefix("education:"))
     if level is None:
@@ -28,18 +31,22 @@ async def choose_education(
         return
     await callback.answer()
     await update_keyboard(callback.message, None)
-    text = f"Registration complete!\n\n{student.format()}\nEducation level: {level}"
+    text = student_profile(student, title="Registration complete", education_level=level)
     if pending_titles:
         pending_forms = await event_repository.pending_forms(callback.from_user.id)
-        text += (
+        text += Text(
             "\n\nSaved events without extra questions have been registered. "
             "Complete the event questions below to finish the remaining registrations.\n"
             if pending_forms
             else "\n\nYour saved events have been registered.\n"
-        ) + "\n".join(pending_titles)
+        ) + Text("\n".join(pending_titles))
     await callback.message.answer(
-        text, parse_mode=None, reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel)
+        **text.as_kwargs(), reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel)
     )
+    if command_menu is not None:
+        await command_menu.sync(
+            callback.bot, callback.from_user.id, registered=True, organizer=can_open_panel
+        )
     await resume_survey(callback.message, event_survey, callback.from_user.id)
 
 

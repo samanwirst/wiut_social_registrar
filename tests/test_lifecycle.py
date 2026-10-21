@@ -58,6 +58,7 @@ async def test_bot_runs_retention_when_the_mini_app_is_disabled(tmp_path, monkey
     )
     app.bot.get_webhook_info = AsyncMock(return_value=SimpleNamespace(url=""))
     app.dp.start_polling = AsyncMock()
+    app.command_menu.install_defaults = AsyncMock()
     try:
         await app.database.migrate()
         await app.run()

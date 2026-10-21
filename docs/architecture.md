@@ -45,6 +45,14 @@ validates private chats and loads user context for messages and callbacks. Handl
 import other handlers. Reusable dialogs own shared Telegram interaction steps, including
 the narrow handling of an unchanged inline keyboard.
 
+The bot exposes a completed student profile only through `/me` and the registration
+completion confirmation. The profile middleware resolves it from `event.from_user.id`;
+command arguments and message text never select a different student. `/me` reads
+saved data without a Graph request and does not consume questionnaire answers. Plain
+IDs are accepted for initial verification only. Directory lookup remains a console
+capability, separate from the Telegram transport. Organizers retain ownership-checked
+access to their own event participants through the existing panel.
+
 ## Transactions and concurrency
 
 Each operation creates its own `AsyncSession` using `Database.transaction()`. Write
@@ -64,6 +72,13 @@ Where both rows are needed, lock the Telegram user before the event. Transaction
 such as `enroll_pending_events()` and `submit_answers_in_transaction()` join the caller's
 session; they never start or commit another transaction. Unique constraints make repeated
 scans and concurrent requests idempotent for both Telegram identity and Outlook profile.
+
+Selecting a different valid event discards the user's other pending invitations and
+questionnaire draft in the same transaction that selects or enrolls in the new event.
+The user lock serializes competing selections. Failed event validation leaves the
+current progress intact; completed registrations and student verification are preserved.
+Reopening the same event keeps its draft and question token. Old buttons from a
+discarded questionnaire cannot submit answers to the newly selected event.
 
 Shared UTC clocks are injectable. Drafts expire after one hour of inactivity; final answers
 default to 30 days. Expired answers are filtered on reads and physically deleted at startup

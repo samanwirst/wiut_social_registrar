@@ -1,7 +1,9 @@
 """Question rendering and reusable chat questionnaire transitions."""
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.formatting import Bold, Italic, Text
 
+from app.chat_formatting import card, event_confirmation
 from app.event_errors import EventError
 
 
@@ -31,22 +33,30 @@ def question_keyboard(step):
 async def send_question(message, step):
     question = step.question
     if step.index == 0 and step.event.description:
-        await message.answer(step.event.description, parse_mode=None)
+        await message.answer(**card(step.event.title, step.event.description).as_kwargs())
     instruction = {
         "text": "Send your answer as a message.",
         "number": "Send a number as a message.",
         "single_choice": "Choose one option below.",
         "multiple_choice": "Choose one or more options below, then tap Continue.",
     }[question["type"]]
-    text = f"{step.event.title}\nQuestion {step.index + 1}/{len(step.event.questions)}\n\n{question['label']}\n\n{instruction}"
+    text = Text(
+        Bold(step.event.title),
+        "\n",
+        Italic(f"Question {step.index + 1}/{len(step.event.questions)}"),
+        "\n\n",
+        Bold(question["label"]),
+        "\n\n",
+        instruction,
+    )
     if not question["required"]:
-        text += " This question is optional."
+        text += Text("\n", Italic("Optional — you can skip this question."))
     if step.index == 0:
-        text += (
+        text += Text(
             f"\n\nAnswers are visible only to the organizer and kept for up to "
-            f"{step.event.response_retention_days} days. Use /cancel to leave this questionnaire."
+            f"{step.event.response_retention_days} days."
         )
-    await message.answer(text, parse_mode=None, reply_markup=question_keyboard(step))
+    await message.answer(**text.as_kwargs(), reply_markup=question_keyboard(step))
 
 
 async def resume_survey(message, event_survey, user_id=None):
@@ -67,7 +77,7 @@ async def receive_answer(message, event_survey):
         await message.answer(str(error))
         return
     if completed:
-        await message.answer(f"You are registered for: {completed.title}", parse_mode=None)
+        await message.answer(**event_confirmation(completed).as_kwargs())
         await resume_survey(message, event_survey)
     else:
         await send_question(message, step)

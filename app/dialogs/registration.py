@@ -8,8 +8,11 @@ from aiogram.types import (
     KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
 )
+from aiogram.utils.formatting import Bold, Code, Text
 
+from app.chat_formatting import card
 from app.education import EDUCATION_LEVELS
 from registrar.errors import GraphError
 
@@ -18,10 +21,17 @@ logger = logging.getLogger(__name__)
 
 async def phone_prompt(message: Message, text: str | None = None) -> None:
     await message.answer(
-        text
-        or "Your email is verified. Next, tap Share phone number below "
-        "to share your own Telegram contact. Your number will be saved with your profile.\n"
-        "Use /cancel to change your student ID.",
+        **card(
+            "Step 3 of 4 · Phone number",
+            text
+            or Text(
+                "Your email is verified.\n",
+                "Tap ",
+                Bold("Share phone number"),
+                " below to share your own Telegram contact.\n\n",
+                "Your number will be saved with your student profile.",
+            ),
+        ).as_kwargs(),
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="Share phone number", request_contact=True)]],
             resize_keyboard=True,
@@ -36,22 +46,44 @@ async def education_prompt(message: Message) -> None:
         for key, label in EDUCATION_LEVELS.items()
     ]
     await message.answer(
-        "Select your current education level to finish registration:",
+        **card(
+            "Step 4 of 4 · Education level",
+            "Select your current education level to finish registration.",
+        ).as_kwargs(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons[:2], buttons[2:]]),
     )
 
 
 async def code_prompt(message, status):
     text = (
-        "Check the Outlook mailbox linked to your student ID and enter the 6-digit code here. "
-        "The code expires in 10 minutes.\nUse /resend for a new code or /cancel to change your ID."
+        "Open the Outlook mailbox linked to your student ID and enter the 6-digit code here.\n"
+        "The code expires in 10 minutes.\n\n"
+        "/resend — request a new code"
     )
     if status == "unknown":
         text = (
-            "Microsoft did not confirm submission. If the verification email arrives in Outlook, "
-            "enter its 6-digit code here. Otherwise, wait 60 seconds and use /resend."
+            "Microsoft did not confirm email submission.\n"
+            "If the email arrives in Outlook, enter its 6-digit code here.\n\n"
+            "Otherwise, wait 60 seconds and use /resend."
         )
-    await message.answer(text)
+    await message.answer(**card("Step 2 of 4 · Verify your email", text).as_kwargs())
+
+
+async def welcome(message: Message) -> None:
+    content = Text(
+        Bold("Welcome to Social Registrar"),
+        "\n",
+        "Register once. Join WIUT events with a scan.\n\n",
+        Bold("Step 1 of 4 · Student ID"),
+        "\n",
+        "Send your own student ID as text. Keep any leading zeroes.\n",
+        "For example: ",
+        Code("00000001"),
+        "\n\n",
+        "Next, verify your Outlook email, share your phone number and choose your education level.\n\n",
+        "/help — how it works",
+    )
+    await message.answer(**content.as_kwargs(), reply_markup=ReplyKeyboardRemove())
 
 
 async def request_code(message, service, student_id):

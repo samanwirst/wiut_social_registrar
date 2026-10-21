@@ -8,6 +8,7 @@ from app.event_forms import validate_answers
 from app.models import (
     Event,
     EventAnswers,
+    EventFormSession,
     EventRegistration,
     PendingEventRegistration,
     TelegramUser,
@@ -38,6 +39,22 @@ async def existing_registration(session, user, event_id):
                 EventRegistration.telegram_user_id == user.id,
                 EventRegistration.outlook_profile_id == user.outlook_profile_id,
             ),
+        )
+    )
+
+
+async def discard_other_pending_events(session, user_id, event_id):
+    """Caller holds the user lock and has validated the newly selected event."""
+    await session.execute(
+        delete(EventFormSession).where(
+            EventFormSession.telegram_user_id == user_id,
+            EventFormSession.event_id != event_id,
+        )
+    )
+    await session.execute(
+        delete(PendingEventRegistration).where(
+            PendingEventRegistration.telegram_user_id == user_id,
+            PendingEventRegistration.event_id != event_id,
         )
     )
 
@@ -99,6 +116,7 @@ class EventEnrollment:
             )
             if not event.registration_open and not existing:
                 raise EventError("Registration for this event is closed.")
+            await discard_other_pending_events(session, user_id, event_id)
             registered = registration_complete(user)
             if not registered or (event.questions and existing is None):
                 await session.execute(

@@ -88,7 +88,7 @@ async def test_same_student_with_another_telegram_account_is_not_counted_twice(r
 
 
 @pytest.mark.asyncio
-async def test_new_student_pending_events_survive_restart_and_enroll_only_after_education(
+async def test_latest_event_replaces_pending_invitation_and_survives_registration_restart(
     repository, events
 ):
     await register(repository, 100)
@@ -97,7 +97,7 @@ async def test_new_student_pending_events_survive_restart_and_enroll_only_after_
     assert (await events.visit(200, first.id))[1] == "pending"
     await events.visit(200, first.id)
     await events.visit(200, second.id)
-    assert set(await events.pending_titles(200)) == {"First", "Second"}
+    assert await events.pending_titles(200) == ["Second"]
     await repository.reserve_code(
         200,
         Student("00000200", "Second", "200@example.test", account="00000200@example.test"),
@@ -107,7 +107,7 @@ async def test_new_student_pending_events_survive_restart_and_enroll_only_after_
     await repository.save_contact(200, 200, "+998909999999")
     async with repository.db.transaction() as session:
         assert list(await session.scalars(select(EventRegistration))) == []
-        assert len(list(await session.scalars(select(PendingEventRegistration)))) == 2
+        assert len(list(await session.scalars(select(PendingEventRegistration)))) == 1
     await repository.db.close()
     reopened = Database(repository.db.engine.url.render_as_string(hide_password=False))
     try:
@@ -117,11 +117,26 @@ async def test_new_student_pending_events_survive_restart_and_enroll_only_after_
         await restarted.complete_registration(200, "Level 4")
         async with reopened.transaction() as session:
             entries = list(await session.scalars(select(EventRegistration)))
-            assert {entry.event_id for entry in entries} == {first.id, second.id}
+            assert {entry.event_id for entry in entries} == {second.id}
             assert all(entry.telegram_user_id == 200 for entry in entries)
             assert list(await session.scalars(select(PendingEventRegistration))) == []
     finally:
         await reopened.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_different_event_scans_keep_one_pending_selection(repository, events):
+    await register(repository, 100)
+    first = await events.create(100, "First")
+    second = await events.create(100, "Second")
+    results = await asyncio.gather(events.visit(200, first.id), events.visit(200, second.id))
+    assert [status for _, status in results] == ["pending", "pending"]
+    pending = await events.pending_titles(200)
+    assert len(pending) == 1 and pending[0] in {first.title, second.title}
+    await register(repository, 200)
+    assert (await events.members(100, first.id)).total + (
+        await events.members(100, second.id)
+    ).total == 1
 
 
 @pytest.mark.asyncio

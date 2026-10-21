@@ -3,6 +3,7 @@ import re
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
+from app.chat_formatting import event_confirmation
 from app.dialogs.messages import update_keyboard
 from app.dialogs.surveys import question_keyboard, resume_survey, send_question
 from app.event_errors import EventError
@@ -31,7 +32,7 @@ async def answer_callback(callback: CallbackQuery, event_survey):
     if toggled:
         return
     if completed:
-        await callback.message.answer(f"You are registered for: {completed.title}", parse_mode=None)
+        await callback.message.answer(**event_confirmation(completed).as_kwargs())
         await resume_survey(callback.message, event_survey, callback.from_user.id)
     else:
         await send_question(callback.message, step)

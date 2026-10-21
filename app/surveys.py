@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 
 from app.event_errors import EventError
 from app.event_forms import apply_question_response
-from app.events.enrollment import existing_registration
+from app.events.enrollment import discard_other_pending_events, existing_registration
 from app.models import Event, EventFormSession, PendingEventRegistration, TelegramUser
 from app.registration_state import registration_complete
 
@@ -51,6 +51,7 @@ class EventSurvey:
             )
             if event is None or not event.registration_open:
                 raise EventError("This event is not accepting registrations.")
+            await discard_other_pending_events(session, user_id, event_id)
             if (
                 not event.questions
                 or await existing_registration(session, user, event_id) is not None
@@ -68,10 +69,6 @@ class EventSurvey:
                 return None
             draft = await session.get(EventFormSession, user_id)
             now = self.repository.clock()
-            if draft is not None and draft.expires_at > now and draft.event_id != event_id:
-                raise EventError(
-                    "Finish your current event questions first, or use /cancel. The new event link is saved."
-                )
             if draft is None:
                 draft = EventFormSession(telegram_user_id=user_id, event_id=event_id, answers={})
                 session.add(draft)
@@ -121,7 +118,7 @@ class EventSurvey:
             )
             if event is None or not event.registration_open:
                 raise EventError(
-                    "Registration for this event is closed. Use /cancel to leave this questionnaire."
+                    "Registration for this event is closed. Please contact the organizer."
                 )
             if draft.revision != event.form_revision:
                 raise EventError("This form was updated. Send /start to reload its questions.")

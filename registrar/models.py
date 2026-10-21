@@ -9,7 +9,7 @@ EMAIL_PATTERN = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+", re.U
 def validate_student_id(value: str) -> str:
     student_id = value.strip()
     if not re.fullmatch(r"[0-9]{1,32}", student_id):
-        raise ValueError("Student ID must contain 1 to 32 digits. Leading zeroes are preserved.")
+        raise ValueError("Student ID must contain 1 to 32 digits. Leading zeroes are preserved")
     return student_id
 
 

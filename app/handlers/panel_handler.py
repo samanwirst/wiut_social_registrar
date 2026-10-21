@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
+from app.chat_formatting import card
 from app.dialogs.messages import update_keyboard
 from app.keyboards import main_menu
 
@@ -17,7 +18,11 @@ async def cmd_panel(message: Message, verified_student, mini_app_url, event_repo
         await message.answer("The event panel is not available yet. Please try again later.")
     else:
         await message.answer(
-            "Manage your events, registration questions, and participant tables:",
+            **card(
+                "Event panel",
+                "Manage your events, registration questions and participants\n"
+                "Choose an event in the panel to get started",
+            ).as_kwargs(),
             reply_markup=main_menu(mini_app_url, can_open_panel=True),
         )
 

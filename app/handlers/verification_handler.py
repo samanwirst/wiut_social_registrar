@@ -2,7 +2,7 @@ import logging
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 
 from app.dialogs.registration import (
     code_prompt,
@@ -18,7 +18,9 @@ async def cmd_resend(
     message: Message, registration_service, registration_repository, verified_student
 ):
     if verified_student:
-        await message.answer("Your account is already registered. Use /start to see your profile.")
+        await message.answer(
+            "Your account is already registered. Use /me to view your own profile."
+        )
         return
     if await prompt_remaining_profile_fields(message, registration_repository):
         return
@@ -34,28 +36,7 @@ async def cmd_resend(
     await code_prompt(message, status)
 
 
-async def cmd_cancel(message: Message, registration_repository, verified_student, event_survey):
-    if await event_survey.cancel(message.from_user.id):
-        await message.answer(
-            "Event questionnaire cancelled. Open the event link again to restart it."
-        )
-        return
-    if verified_student:
-        await message.answer("Your account is already registered. Use /start to see your profile.")
-        return
-    try:
-        await registration_repository.cancel(message.from_user.id)
-    except RegistrationError as error:
-        await message.answer(str(error))
-        return
-    await message.answer(
-        "Registration cancelled. Send your student ID to start again.",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-
-
 def create_router():
     router = Router(name=__name__)
     router.message.register(cmd_resend, Command("resend"))
-    router.message.register(cmd_cancel, Command("cancel"))
     return router

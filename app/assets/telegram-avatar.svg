@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Social Registrar monogram</title>
+  <rect width="1024" height="1024" fill="#0d1b34"/>
+  <circle cx="512" cy="512" r="405" fill="none" stroke="#fff4d7" stroke-opacity=".06" stroke-width="2"/>
+  <path d="M441 248h142" fill="none" stroke="#b52550" stroke-width="8"/>
+  <text x="492" y="634" text-anchor="middle" fill="#fff4d7" font-family="Georgia, 'DejaVu Serif', serif" font-size="438" font-weight="700" letter-spacing="-37">SR</text>
+  <rect x="466" y="714" width="92" height="92" rx="25" fill="#b52550"/>
+  <path d="m491 758 15 15 29-31" fill="none" stroke="#fff4d7" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

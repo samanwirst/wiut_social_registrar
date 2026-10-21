@@ -1,6 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import Message, ReplyKeyboardRemove
 
+from app.chat_formatting import card
 from app.dialogs.registration import education_prompt, phone_prompt
 from app.keyboards import main_menu
 from app.repositories import RegistrationError
@@ -15,7 +16,7 @@ async def receive_contact(
 ) -> None:
     if verified_student:
         await message.answer(
-            "Your account is already registered. Use /start to see your profile.",
+            "Your account is already registered. Use /me to view your own profile.",
             reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel),
         )
         return
@@ -43,7 +44,12 @@ async def receive_contact(
     except RegistrationError as error:
         await phone_prompt(message, str(error))
         return
-    await message.answer("Phone number saved.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        **card(
+            "Phone number saved", "One last step: choose your education level below."
+        ).as_kwargs(),
+        reply_markup=ReplyKeyboardRemove(),
+    )
     await education_prompt(message)
 
 

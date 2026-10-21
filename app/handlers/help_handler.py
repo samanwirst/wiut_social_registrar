@@ -1,33 +1,49 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
+from aiogram.utils.formatting import Bold, Code, Text
+
+from app.commands import chat_commands
 
 
-async def cmd_help(message: Message, can_open_panel=False) -> None:
-    panel_help = (
-        "/panel opens the organizer Mini App to edit events and questions and view participants and answers.\n\n"
-        if can_open_panel
-        else ""
+async def cmd_help(message: Message, can_open_panel=False, verified_student=None) -> None:
+    text = Text()
+    if verified_student is None:
+        text += Text(
+            Bold("Register once"),
+            "\n",
+            "1. Send your student ID, including leading zeroes.\n",
+            "2. Enter the 6-digit code from your Outlook email.\n",
+            "3. Tap Share phone number to share your own contact.\n",
+            "4. Choose your current education level.\n\n",
+            "Codes expire after 10 minutes and allow 5 incorrect attempts.\n\n",
+        )
+    else:
+        text += Text(
+            Bold("Your profile"),
+            "\n",
+            "Use /me to view your own verified student profile.\n\n",
+        )
+    text += Text(
+        Bold("Join an event"),
+        "\n",
+        "Scan its QR code with your camera and open the bot (tap Start if Telegram asks).\n",
+        "Complete any event questions here in chat\n\n",
+        Bold("Organize an event"),
+        "\n",
+        "Create an event with ",
+        Code("/new_event [event name]"),
+        "\n",
     )
-    await message.answer(
-        "Registration\n\n"
-        "1. Send your student ID as text. Keep any leading zeroes.\n"
-        "2. Open your Outlook mailbox and find the verification email.\n"
-        "3. Send the 6-digit code here to verify your email.\n"
-        "4. Tap Share phone number to share your own Telegram contact.\n"
-        "5. Select CIFS, Level 4, Level 5, or Level 6 using the inline buttons to complete registration.\n\n"
-        "Codes expire after 10 minutes and allow 5 incorrect attempts.\n"
-        "/resend requests a new code; /cancel changes the pending student ID.\n"
-        "After registration, send an ID to look up a profile, or use /start for your own profile.\n\n"
-        "Events\n\n"
-        "Use /new_event Event name to create an event and get its QR code.\n"
-        "Open an event QR link and press Start if Telegram asks. Registered students are enrolled "
-        "automatically; new users finish student registration first. Repeated scans do not create duplicates.\n\n"
-        "Events with extra questions ask them here in chat before enrollment. "
-        "Reply to text questions with a message and use inline buttons for choices. "
-        "Use /start to resume or /cancel to leave a questionnaire.\n"
-        f"{panel_help}"
+    if can_open_panel:
+        text += Text("Use /panel to manage events, questions and participants\n")
+    text += Text("\n", Bold("Commands"), "\n")
+    commands = chat_commands(registered=verified_student is not None, organizer=can_open_panel)
+    text += Text("\n".join(f"/{item.command} — {item.description}" for item in commands))
+    text += Text(
+        "\n\nEvent organizers can see their participants' contact details and event answers",
     )
+    await message.answer(**text.as_kwargs())
 
 
 def create_router() -> Router:

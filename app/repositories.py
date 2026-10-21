@@ -129,7 +129,7 @@ class RegistrationRepository:
                 )
             if user.education_level is not None:
                 raise RegistrationError(
-                    "Your account is already registered. Use /start to see your profile."
+                    "Your account is already registered. Use /me to view your own profile."
                 )
             profile = await session.get(OutlookProfile, user.outlook_profile_id)
             now = self.clock()
@@ -156,7 +156,7 @@ class RegistrationRepository:
             if user is not None:
                 if user.registered_at is not None:
                     raise RegistrationError(
-                        "Your account is already registered. Use /start to see your profile."
+                        "Your account is already registered. Use /me to view your own profile."
                     )
                 user.verified_at = None
                 user.outlook_profile_id = None

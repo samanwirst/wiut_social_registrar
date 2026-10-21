@@ -103,17 +103,94 @@ async def test_form_enrollment_waits_for_final_answer_and_persists_no_profile_fi
 
 
 @pytest.mark.asyncio
-async def test_new_students_finish_account_registration_before_event_questions(repository):
+async def test_new_students_finish_account_registration_before_latest_event_questions(repository):
     events, event = await configured(repository)
     plain = await events.create(100, "No form")
-    await events.visit(200, event.id)
     await events.visit(200, plain.id)
+    await events.visit(200, event.id)
     await registered(repository, 200)
-    assert (await events.members(100, plain.id)).total == 1
+    assert (await events.members(100, plain.id)).total == 0
     assert (await events.members(100, event.id)).total == 0
     assert [item.id for item in await events.pending_forms(200)] == [event.id]
     step = await EventSurvey(events).resume(200)
     assert step.event.id == event.id
+
+
+@pytest.mark.asyncio
+async def test_switching_event_discards_unfinished_answers_and_rejects_old_buttons(repository):
+    events, first = await configured(repository, [question(), question("single_choice")])
+    second = await events.create(100, "Second")
+    second = await events.configure(
+        100, second.id, configuration(second, questions=[question("single_choice")])
+    )
+    await registered(repository, 200)
+    survey = EventSurvey(events)
+    await events.visit(200, first.id)
+    await survey.begin(200, first.id)
+    old_step, _ = await survey.respond(200, text="Discard this partial answer")
+    # Another student filling in the first event must be unaffected.
+    await events.visit(100, first.id)
+    await survey.begin(100, first.id)
+
+    await events.visit(200, second.id)
+    current = await survey.begin(200, second.id)
+    assert current.event.id == second.id and current.index == 0 and current.answers == {}
+    assert await events.pending_titles(200) == [second.title]
+    assert (await survey.resume(100)).event.id == first.id
+    with pytest.raises(EventError, match="earlier question"):
+        await survey.respond(200, token=old_step.token, action="choose", option=0)
+    _, completed = await survey.respond(200, token=current.token, action="choose", option=1)
+    assert completed.id == second.id
+    assert (await events.members(100, first.id)).total == 0
+    assert (await events.members(100, second.id)).total == 1
+    assert await repository.verified(200) is not None
+    await events.visit(200, first.id)
+    restarted = await survey.begin(200, first.id)
+    assert restarted.index == 0 and restarted.answers == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["missing", "closed"])
+async def test_invalid_event_switch_preserves_current_questionnaire(repository, target):
+    events, first = await configured(repository, [question(), question()])
+    await registered(repository, 200)
+    survey = EventSurvey(events)
+    await events.visit(200, first.id)
+    await survey.begin(200, first.id)
+    before, _ = await survey.respond(200, text="Keep this answer")
+    target_id = str(uuid4())
+    if target == "closed":
+        second = await events.create(100, "Closed")
+        await events.configure(100, second.id, configuration(second, registration_open=False))
+        target_id = second.id
+    with pytest.raises(EventError):
+        await events.visit(200, target_id)
+    after = await survey.resume(200)
+    assert after.event.id == first.id and after.token == before.token
+    assert after.index == before.index and after.answers == before.answers
+    assert await events.pending_titles(200) == [first.title]
+
+
+@pytest.mark.asyncio
+async def test_event_switch_failure_rolls_back_discarded_progress(repository, monkeypatch):
+    events, first = await configured(repository, [question(), question()])
+    second = await events.create(100, "No questions")
+    await registered(repository, 200)
+    survey = EventSurvey(events)
+    await events.visit(200, first.id)
+    await survey.begin(200, first.id)
+    before, _ = await survey.respond(200, text="Keep on failure")
+
+    async def fail_enrollment(*args):
+        raise RuntimeError("Simulated enrollment failure")
+
+    monkeypatch.setattr("app.events.enrollment.enroll", fail_enrollment)
+    with pytest.raises(RuntimeError, match="Simulated"):
+        await events.visit(200, second.id)
+    after = await survey.resume(200)
+    assert after.event.id == first.id and after.answers == before.answers
+    assert after.token == before.token and await events.pending_titles(200) == [first.title]
+    assert (await events.members(100, second.id)).total == 0
 
 
 @pytest.mark.asyncio

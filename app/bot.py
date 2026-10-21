@@ -6,14 +6,16 @@ from contextlib import AsyncExitStack
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import PRODUCTION, TEST
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 
+from app.commands import CommandMenu
 from app.configuration.database import local_database_url
 from app.db import Database
 from app.error_handler import handle_error
 from app.event_repository import EventRepository
 from app.handlers import create_routers
-from app.middleware import PrivateChatMiddleware, UserContextMiddleware
+from app.middleware import CommandMenuMiddleware, PrivateChatMiddleware, UserContextMiddleware
 from app.miniapp import MiniAppServer
 from app.repositories import RegistrationRepository
 from app.services.answer_cleanup import AnswerCleanup
@@ -32,6 +34,7 @@ class BotApp:
             token=settings.token,
             session=AiohttpSession(api=TEST if settings.telegram_test_environment else PRODUCTION),
         )
+        self.command_menu = CommandMenu()
         self.registrar_service = RegistrarService(settings.graph)
         url = settings.database_url or local_database_url(
             settings.graph.env_file, telegram_test=settings.telegram_test_environment
@@ -55,11 +58,13 @@ class BotApp:
             event_repository=self.event_repository,
             event_survey=self.event_survey,
             mini_app_url=settings.mini_app_url,
+            command_menu=self.command_menu,
         )
         self.dp.include_routers(*create_routers())
         for observer in (self.dp.message, self.dp.callback_query):
             observer.middleware(PrivateChatMiddleware())
             observer.middleware(UserContextMiddleware())
+            observer.middleware(CommandMenuMiddleware())
         self.dp.errors.register(handle_error)
 
     async def check_connection(self):
@@ -75,6 +80,10 @@ class BotApp:
                 "A Telegram webhook is configured. Remove it before starting long polling."
             )
         logger.info("Starting polling...")
+        try:
+            await self.command_menu.install_defaults(self.bot)
+        except TelegramAPIError as error:
+            logger.warning("Could not initialize the command menu (%s).", type(error).__name__)
         await self.answer_cleanup.start()
         await self.miniapp_server.start()
         await self.dp.start_polling(

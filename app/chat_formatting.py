@@ -1,0 +1,36 @@
+"""Ordinary Telegram message entities: readable text with literal, untrusted values."""
+
+from aiogram.utils.formatting import Bold, Code, Text
+
+from registrar.models import Student
+
+
+def card(title: str, body: str | Text) -> Text:
+    return Text(Bold(title), "\n\n", body)
+
+
+def student_profile(
+    student: Student, *, title="Your verified profile", education_level=None
+) -> Text:
+    content = Text(
+        Bold(title),
+        "\n\n",
+        "ID: ",
+        Code(student.student_id),
+        "\n",
+        "Name: ",
+        student.name or "Not specified",
+        "\n",
+        "Email: ",
+        student.email,
+    )
+    if student.account:
+        content += Text("\nAccount: ", Code(student.account))
+    if education_level:
+        content += Text("\nEducation level: ", education_level)
+    return content
+
+
+def event_confirmation(event, *, already=False) -> Text:
+    prefix = "You are already registered for: " if already else "You are registered for: "
+    return Text(prefix, Bold(event.title))

@@ -1,8 +1,8 @@
 # WIUT Social Registrar
 
-A Telegram bot for student registration and profile lookup. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
+A Telegram bot for student and event registration. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
 
-Registration is open to everyone in private chats. Verification emails use a fixed template; Telegram users cannot send arbitrary emails. Registered users can look up profiles by sending an ID as text. The Graph core also provides local console email tools.
+Registration is open to everyone in private chats. Verification emails use a fixed template; Telegram users cannot send arbitrary emails. Registered users view only their own linked profile with `/me`; the bot does not offer student-directory searches. The Graph core retains its local console lookup and email tools.
 
 Local mode uses SQLite. Production mode requires PostgreSQL. Both use the same models and Alembic migrations, applied automatically at startup.
 
@@ -95,30 +95,75 @@ docker compose logs --tail=50 -f bot
 
 The check applies database migrations and verifies Telegram and Outlook, then exits without consuming Telegram updates. Open your bot in a private Telegram chat, send `/start`, then your student ID with any leading zeroes. Open Outlook and send the emailed six-digit code back to the bot. A matching code verifies your email and opens the **Share phone number** button. Tap it and confirm sharing your own Telegram contact. Then select **CIFS**, **Level 4**, **Level 5**, or **Level 6** using the inline buttons to complete registration and display your profile.
 
-The bot uses the official [Telegram contact request button](https://core.telegram.org/bots/api#keyboardbutton). It accepts a contact only when its Telegram user ID matches the sender; forwarded contacts, other people's contacts, and numbers typed as text do not complete registration. The phone step survives restarts, and `/start` restores the button without emailing another code. Existing email-verified users are also asked to share their phone number once before using profile lookup. This temporary reply keyboard is removed after the contact is saved. It is the only reply keyboard: Telegram supports `request_contact` only on reply buttons; all menu, education, and event navigation buttons are inline.
+The bot uses the official [Telegram contact request button](https://core.telegram.org/bots/api#keyboardbutton). It accepts a contact only when its Telegram user ID matches the sender; forwarded contacts, other people's contacts, and numbers typed as text do not complete registration. The phone step survives restarts, and `/start` restores the button without emailing another code. Existing email-verified users are also asked to share their phone number once before viewing their profile. This temporary reply keyboard is removed after the contact is saved. It is the only reply keyboard: Telegram supports `request_contact` only on reply buttons; all menu, education, and event navigation buttons are inline.
 
-The education step also survives restarts. `/start` restores its inline buttons; typing a level as text does not select it. Existing registered users without a saved education level are asked to choose it once, while their verified email, phone, original registration time, and event participation are preserved. Repeated clicks cannot overwrite a completed selection. `/cancel` clears an unfinished registration, including a phone number shared during that attempt.
+The education step also survives restarts. `/start` restores its inline buttons; typing a level as text does not select it. Existing registered users without a saved education level are asked to choose it once, while their verified email, phone, original registration time, and event participation are preserved. Repeated clicks cannot overwrite a completed selection.
 
-Codes expire after 10 minutes and allow five incorrect attempts. `/resend` issues a new code and invalidates the old one; `/cancel` clears the pending registration so you can enter another ID. Requests have a 60-second cooldown and a limit of five per hour for a Telegram user or mailbox. Restarting the bot preserves pending codes, limits, and completed registrations.
+Codes expire after 10 minutes and allow five incorrect attempts. `/resend` issues a new code and invalidates the old one. Requests have a 60-second cooldown and a limit of five per hour for a Telegram user or mailbox. Restarting the bot preserves pending codes, limits, and completed registrations.
 
-After registration, `/start` shows your own profile without sending another email. Event organizers also see the inline **Event panel** button when the Mini App is configured. It also removes reply keyboards left by older bot versions. Plain student IDs still perform lookups. `/help` explains the workflow.
+After registration, `/start` resumes any unfinished event questionnaire or sends a short welcome without a profile card or inline buttons. The welcome also removes reply keyboards left by older bot versions. `/me` shows only the completed profile linked to the Telegram sender, from the local database without an Outlook request. It takes no arguments and works only in private chats. Sending an ID or other text after registration does not search for students; text is accepted as an answer when an event questionnaire is active. Event organizers open the panel with `/panel`. `/help` explains the workflow.
+
+### Telegram profile and command menu
+
+The bot presents registration as four steps: student ID, Outlook verification, own phone
+contact, and education level. Messages use ordinary Telegram entities for headings and
+copyable IDs; student names and event text stay literal.
+
+The native **Menu** button adapts to the user. Before registration it offers `/start`,
+`/resend` and `/help`. Registered students see `/me` and `/new_event`; `/panel` appears
+only for event organizers when the panel is configured. Role changes update the menu
+immediately. Updates are cached with bounded memory, and a failed menu update does not
+block registration. Groups do not inherit the private-chat command list.
+
+Profile copy lives in `app/bot_profile.py`; its avatar assets are in `app/assets/`.
+Preview the public name, About text, description and initial commands without credentials:
+
+```bash
+python -m app.bot_profile
+```
+
+Apply them to your bot using its private configuration:
+
+```bash
+python -m app.bot_profile --apply --photo
+# Docker:
+docker compose run --rm bot python -m app.bot_profile --env-file /config/.env --apply --photo
+```
+
+This uses the official [Telegram profile methods](https://core.telegram.org/bots/api#setmyname),
+[profile photo upload](https://core.telegram.org/bots/api#setmyprofilephoto), and
+[command scopes](https://core.telegram.org/bots/api#botcommandscope). It does not start polling,
+read student records, use Outlook, or send chat messages. Omit `--photo` on subsequent runs
+to avoid another photo upload. Text fields are updated only when different. Normal startup
+sets the default command menu; per-chat menus are refreshed when users interact with the bot.
+
+The **description picture** above “What can this bot do?” is a separate image from
+the profile avatar. The ready-to-upload cover is
+[`app/assets/telegram-description.png`](app/assets/telegram-description.png), exactly
+**640 × 360 pixels**. In the official [@BotFather](https://t.me/BotFather), open
+`/mybots` → your bot → **Edit Bot** → **Edit Description Picture**, then send this
+PNG as a photo. [Telegram documents this setup in BotFather](https://core.telegram.org/bots/features#botfather);
+the Bot API does not expose a description-picture setter, so `--apply --photo`
+updates the profile avatar only. The preview command also prints the cover path
+and these setup instructions. Generation details are in
+[`app/assets/README.md`](app/assets/README.md).
 
 ### Events and QR registration
 
-Registered students create events using `/new_event Welcome Night` (name up to 200 characters). `/new_event` without a name creates an event named "New Event". Event creation is available only through this command; there is no New Event button or plain-text shortcut. The bot saves the event and returns a PNG QR code, a clickable link, and an inline **Register for event** button, plus **Manage event** when the Mini App is configured. Each event has a random UUID; the bot username is discovered through Telegram rather than configured in the source.
+Registered students create events using `/new_event Welcome Night` (name up to 200 characters). `/new_event` without a name creates an event named "New Event". Event creation is available only through this command; there is no New Event button or plain-text shortcut. The bot saves the event and returns a short text confirmation with **Manage event** when the Mini App is configured. The creation message contains no QR image, registration link, or registration button. Open the **QR** tab in the organizer panel to download the QR code or copy the registration link. Each event has a random UUID; the bot username is discovered through Telegram rather than configured in the source.
 
 Scan the QR with an ordinary phone camera and open the HTTPS link. It takes the student into the bot using a [Telegram deep link](https://core.telegram.org/bots/features#deep-linking), such as `https://t.me/your_bot?start=event_<uuid>`. Telegram may ask the student to press **Start** before delivering the link to the bot.
 
 - A fully registered student is enrolled immediately if the event has no questions. Otherwise the bot asks the event's questions in chat before enrolling them.
 - A new student is asked for their student ID, Outlook code, own Telegram contact, and current education level. The event is saved while they register. Selecting their education level completes student registration and enrolls them into saved events without questions. Saved events with questions continue into a chat questionnaire.
-- Pending invitations survive restarts, including invitations to several events. `/cancel` cancels unfinished student registration and clears its pending event invitations.
+- The latest event invitation survives restarts. Scanning another event replaces any unfinished event registration and discards its draft answers. Student ID verification, contact sharing, and completed event registrations are preserved.
 - Repeated scans, concurrent requests, and another Telegram account linked to the same Outlook profile do not create duplicate participation. The organizer is enrolled only if they also open the event link.
 
 Creating events is available to all registered users in private chats. Event links enroll the person who opens them.
 
 ### Organizer Mini App and event questionnaires
 
-Create an event with `/new_event Event name`, then open **Manage event** below its QR code, **Event panel** below your profile, or `/panel`. Event creation remains a bot command. The Mini App configures existing events and displays their participant tables.
+Create an event with `/new_event Event name`, then open **Manage event** below the confirmation or use `/panel`. Event creation remains a bot command. The Mini App configures existing events and displays their participant tables.
 
 The Mini App becomes available only after a student **successfully creates their first event with `/new_event`**. Ordinary students do not see Mini App buttons or its help entry; `/panel` asks them to create an event first. Attending someone else's event does not unlock the panel. This permission is checked on every API request as well, so an old or shared Mini App link cannot bypass it. Organizer status is derived from saved event ownership and survives bot restarts.
 
@@ -132,9 +177,9 @@ The organizer workspace provides:
 
 Set up questions **before sharing the QR code**. Events start open and have no questions, preserving immediate enrollment until questions are added. Students already enrolled are not asked to register again; their extra answer cells show a dash.
 
-Students fill questionnaires **inside the bot chat**, not in the Mini App. The bot sends one question at a time. Text and number questions accept a message; single-choice questions use inline options; multiple-choice questions toggle inline options and then use **Continue**. Optional questions have **Skip**. `/start` restores progress, and `/cancel` discards the current questionnaire without changing the verified student account. Another event QR opened during a questionnaire is saved for later. Saved questionnaires continue one at a time after the previous event is completed.
+Students fill questionnaires **inside the bot chat**, not in the Mini App. The bot sends one question at a time. Text and number questions accept a message; single-choice questions use inline options; multiple-choice questions toggle inline options and then use **Continue**. Optional questions have **Skip**. `/start` restores progress. Opening another event QR immediately leaves the unfinished event and starts the selected event; earlier draft answers are discarded and its old inline buttons cannot answer the new questionnaire. Reopening the same event preserves progress. An invalid or closed event link leaves the current questionnaire intact.
 
-Unfinished answers are stored separately in `event_form_sessions` for **one hour of inactivity**, so restarts do not lose progress. They are removed on cancellation or successful submission. Final answers live only in `event_answers`, with their own expiration timestamp; neither profile tables nor analytics events receive their contents. The final answer, questionnaire removal, and event enrollment commit in one database transaction. Repeated QR scans or old inline buttons cannot create duplicate participation or overwrite answers. Questions become immutable after the first submitted questionnaire, even after its answers expire, to preserve their meaning. Event details and registration status remain editable in the Mini App.
+Unfinished answers are stored separately in `event_form_sessions` for **one hour of inactivity**, so restarts do not lose progress. They are removed after expiration or successful submission. Final answers live only in `event_answers`, with their own expiration timestamp; neither profile tables nor analytics events receive their contents. The final answer, questionnaire removal, and event enrollment commit in one database transaction. Repeated QR scans or old inline buttons cannot create duplicate participation or overwrite answers. Questions become immutable after the first submitted questionnaire, even after its answers expire, to preserve their meaning. Event details and registration status remain editable in the Mini App.
 
 Expired answers disappear from API results immediately. A cleanup job physically deletes expired answers and drafts at bot startup and every **10 minutes**, including when the Mini App is disabled. Database backups have their own lifecycle; align backup retention with your chosen answer retention policy if you make backups.
 
@@ -234,7 +279,7 @@ docker compose --env-file .local/.env \
 
 For SQLite instead of PostgreSQL, omit `-f compose.production.yaml`. If ports 80/443 already belong to another reverse proxy, copy only the `bot` environment and loopback port mapping from `compose.miniapp.yaml` into your own override and forward HTTPS to that port. `deploy/Caddyfile` forwards requests to `bot:8080`; certificate data persists in Docker volumes. The frontend and `/api` must use the same origin. The local health endpoint is `http://127.0.0.1:8080/health` while the Mini App server is enabled.
 
-Restart the bot, create your first event with `/new_event Event name`, and use `/start` or `/panel` to receive a Web App button. Existing event creators already qualify. A separate Telegram Main Mini App or menu-button configuration in BotFather is optional; the included private-chat inline Web App buttons are sufficient.
+Restart the bot, create your first event with `/new_event Event name`, and open **Manage event** below the confirmation or use `/panel` to receive a Web App button. Existing event creators already qualify. A separate Telegram Main Mini App or menu-button configuration in BotFather is optional; the included private-chat inline Web App buttons are sufficient.
 
 Every API request sends raw `Telegram.WebApp.initData` in the `Authorization` header. The server validates its Telegram HMAC using aiogram, rejects duplicate fields, expired/future authentication data, and bot identities, and checks completed student registration and event ownership. Authentication expires after one hour; reopen the panel to refresh it. Telegram IDs from query parameters or unverified browser data are never used for access. Responses disable caching, values render as literal text, and request bodies/authentication headers are not logged. Each event has a revision to prevent one editor window from silently overwriting another.
 
@@ -424,7 +469,7 @@ main.py                              # Telegram entry point
 config.py                            # Bot configuration
 app/bot.py                           # Bot, dispatcher, middleware, shutdown
 app/middleware.py                    # Private-chat access and shared per-user context
-app/handlers/                        # Registration, verification, and plain ID lookup
+app/handlers/                        # Registration, verification, own profile, and event commands
 app/dialogs/                         # Reusable registration and questionnaire chat steps
 app/services/registrar_service.py    # Graph lookups and fixed verification mail template
 app/services/registration_service.py # Registration workflow

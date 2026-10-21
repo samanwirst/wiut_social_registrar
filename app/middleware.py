@@ -18,7 +18,7 @@ class PrivateChatMiddleware(BaseMiddleware):
         else:
             if event.chat.type != "private":
                 await event.answer(
-                    "Please open a private chat with the bot to register or look up a profile."
+                    "Please open a private chat with the bot to register or view your own profile."
                 )
                 return
             if event.from_user is None or event.from_user.is_bot:
@@ -34,4 +34,15 @@ class UserContextMiddleware(BaseMiddleware):
         data["can_open_panel"] = bool(data["mini_app_url"]) and await data[
             "event_repository"
         ].is_organizer(event.from_user.id)
+        return await handler(event, data)
+
+
+class CommandMenuMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: Message | CallbackQuery, data):
+        await data["command_menu"].sync(
+            data["bot"],
+            event.from_user.id,
+            registered=data["verified_student"] is not None,
+            organizer=data["can_open_panel"],
+        )
         return await handler(event, data)

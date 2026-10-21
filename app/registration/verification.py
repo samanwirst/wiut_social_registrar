@@ -47,7 +47,7 @@ class VerificationRepository:
                 raise RegistrationError("Send /start to begin registration.")
             if user.registered_at is not None:
                 raise RegistrationError(
-                    "Your account is already registered. Use /start to see your profile."
+                    "Your account is already registered. Use /me to view your own profile."
                 )
             if user.verified_at is not None:
                 raise RegistrationError(
@@ -135,9 +135,7 @@ class VerificationRepository:
 
     async def consume_code(self, user_id, code: str) -> Student:
         if not re.fullmatch(r"[0-9]{6}", code):
-            raise RegistrationError(
-                "Enter the 6-digit code from Outlook, or use /cancel to change your student ID."
-            )
+            raise RegistrationError("Enter the 6-digit code from Outlook.")
         error = None
         student = None
         async with self.db.transaction(write=True) as session:

@@ -1,19 +1,15 @@
-import asyncio
-
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import (
-    BufferedInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
     WebAppInfo,
 )
-from aiogram.utils.deep_linking import create_start_link
+from aiogram.utils.formatting import Bold, Text
 
 from app.dialogs.registration import prompt_remaining_profile_fields
 from app.event_repository import EventError
-from app.services.event_service import event_qr
 
 
 async def new_event(
@@ -23,6 +19,7 @@ async def new_event(
     verified_student,
     command: CommandObject | None = None,
     mini_app_url="",
+    command_menu=None,
 ):
     if not verified_student:
         if not await prompt_remaining_profile_fields(message, registration_repository):
@@ -36,10 +33,18 @@ async def new_event(
     except EventError as error:
         await message.answer(str(error))
         return
-    link = await create_start_link(message.bot, "event_" + event.id)
-    png = await asyncio.to_thread(event_qr, link)
-    rows = [[InlineKeyboardButton(text="Register for event", url=link)]]
+    text = Text(
+        Bold("Congratulations! Event created 🎉"),
+        "\n\n",
+        Bold(event.title),
+        "\n\nManage registration process from your event panel:\n",
+        "• Edit event details and add questions\n",
+        "• Get your QR code and invite link\n",
+        "• View participants and their answers\n\n",
+    )
+    rows = []
     if mini_app_url:
+        text += Text("Tap Manage event below to open the panel\nYou can return anytime with /panel")
         rows.append(
             [
                 InlineKeyboardButton(
@@ -47,12 +52,16 @@ async def new_event(
                 )
             ]
         )
-    await message.answer_photo(
-        BufferedInputFile(png, filename=f"event-{event.id}.png"),
-        caption=f"{event.title}\n\nShare this QR code or link to register for the event:\n{link}",
-        parse_mode=None,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    else:
+        text += Text("The event panel is currently unavailable. Your event has been saved.")
+    await message.answer(
+        **text.as_kwargs(),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
     )
+    if command_menu is not None:
+        await command_menu.sync(
+            message.bot, message.from_user.id, registered=True, organizer=bool(mini_app_url)
+        )
 
 
 def create_router() -> Router:

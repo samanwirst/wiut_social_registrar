@@ -11,6 +11,7 @@ from aiogram.methods import (
     SendMessage,
     SendPhoto,
     SendRichMessage,
+    SetMyCommands,
 )
 from aiogram.types import Chat, Contact, Message, ReplyKeyboardRemove, Update, User
 from sqlalchemy import select
@@ -146,32 +147,101 @@ async def test_registration_hides_profile_until_email_phone_and_education_are_co
     assert replies[-1].reply_markup is None
     assert (await app.registration_repository.verified(100)).student_id == "00000001"
     replies = await send(app, "/start")
-    assert "Your verified profile" in replies[-1].text
+    assert len(replies) == 1
+    assert "You're all set!" in replies[0].text
+    assert PERSON.student_id not in replies[0].text and PERSON.email not in replies[0].text
     assert isinstance(replies[0].reply_markup, ReplyKeyboardRemove)
-    assert replies[-1].reply_markup is None
     assert app.registrar_service.send_verification_code.await_count == 1
 
 
 @pytest.mark.asyncio
-async def test_verified_user_can_still_look_up_students(app):
+async def test_me_shows_only_the_profile_linked_to_the_current_telegram_user(app):
     await register(app)
-    replies = await send(app, "00000001")
-    assert "Email: student@example.test" in replies[-1].text
-    assert app.registrar_service.send_verification_code.await_count == 1
+    other = Student(
+        "00000002", "Other Student", "other@example.test", account="00000002@example.test"
+    )
+    app.registrar_service.find_student.return_value = other
+    await register(app, user_id=200)
+    app.registrar_service.reset_mock()
+
+    for user_id, own, foreign in ((100, PERSON, other), (200, other, PERSON)):
+        replies = await send(app, "/me", user_id=user_id)
+        assert len(replies) == 1
+        assert own.student_id in replies[0].text and own.email in replies[0].text
+        assert own.name in replies[0].text
+        assert foreign.student_id not in replies[0].text and foreign.email not in replies[0].text
+        assert replies[0].reply_markup is None
+    app.registrar_service.find_student.assert_not_called()
+    app.registrar_service.send_verification_code.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text", ["00000001", "00000002", "asd", "/me 00000002", "/me@test_registrar_bot 00000002"]
+)
+async def test_registered_user_cannot_search_for_profiles_or_select_a_me_target(app, text):
+    await register(app)
+    app.registrar_service.reset_mock()
+    app.registrar_service.find_student.side_effect = AssertionError("Chat must not search profiles")
+    replies = await send(app, text)
+    assert "/me" in replies[-1].text
+    assert PERSON.name not in replies[-1].text and PERSON.email not in replies[-1].text
+    assert "00000002" not in replies[-1].text
+    app.registrar_service.find_student.assert_not_called()
+    app.registrar_service.send_verification_code.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["new", "code", "phone", "education"])
+async def test_me_hides_profile_until_all_registration_steps_are_complete(app, stage):
+    if stage != "new":
+        await send(app, "00000001")
+    if stage in {"phone", "education"}:
+        await send(app, app.registrar_service.send_verification_code.await_args.args[1])
+    if stage == "education":
+        await send(
+            app, contact=Contact(phone_number="+998901234567", first_name="User", user_id=100)
+        )
+    app.registrar_service.reset_mock()
+    replies = await send(app, "/me")
+    assert len(replies) == 1
+    for private_value in (PERSON.student_id, PERSON.name, PERSON.email, PERSON.account):
+        assert private_value not in replies[0].text
+    app.registrar_service.find_student.assert_not_called()
+    app.registrar_service.send_verification_code.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_me_never_shares_profile_in_a_group(app):
+    await register(app)
+    app.registrar_service.reset_mock()
+    replies = await send(app, "/me", chat_type="group")
+    assert "private chat" in replies[-1].text
+    assert PERSON.name not in replies[-1].text and PERSON.email not in replies[-1].text
+    app.registrar_service.find_student.assert_not_called()
+    app.registrar_service.send_verification_code.assert_not_called()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("registered", [False, True])
 @pytest.mark.parametrize(
     "text",
-    ["/find", "/find 00000001", "/send", "/mail 00000001", "/members", "/members invalid-id"],
+    [
+        "/find",
+        "/find 00000001",
+        "/send",
+        "/mail 00000001",
+        "/members",
+        "/members invalid-id",
+        "/cancel",
+    ],
 )
 async def test_removed_commands_cannot_look_up_or_send(app, text, registered):
     if registered:
         await register(app)
         app.registrar_service.reset_mock()
     replies = await send(app, text)
-    assert "student ID" in replies[-1].text
+    assert "command is not available" in replies[-1].text
     app.registrar_service.find_student.assert_not_called()
     app.registrar_service.send_verification_code.assert_not_called()
 
@@ -244,12 +314,17 @@ async def test_private_chat_required(app):
 
 
 @pytest.mark.asyncio
-async def test_cancel_invalidates_code_without_resetting_cooldown(app):
+async def test_removed_cancel_preserves_pending_code_and_cooldown(app):
     await send(app, "00000001")
-    await send(app, "/cancel")
-    assert await app.registration_repository.pending(100) is None
-    replies = await send(app, "00000001")
+    code = app.registrar_service.send_verification_code.await_args.args[1]
+    replies = await send(app, "/cancel")
+    assert "not available" in replies[-1].text
+    assert await app.registration_repository.pending(100) is not None
+    replies = await send(app, "/resend")
     assert "wait" in replies[-1].text
+    replies = await send(app, code)
+    assert replies[-1].reply_markup.keyboard[0][0].request_contact
+    assert app.registrar_service.send_verification_code.await_count == 1
     assert await app.registration_repository.verified(100) is None
 
 
@@ -334,16 +409,17 @@ async def test_phone_step_blocks_text_lookups_and_resends_and_resumes_on_start(a
 
 
 @pytest.mark.asyncio
-async def test_cancel_phone_step_removes_keyboard_and_requires_email_again(app):
+async def test_removed_cancel_keeps_phone_step_and_verified_email(app):
     await send(app, "00000001")
     await send(app, app.registrar_service.send_verification_code.await_args.args[1])
     replies = await send(app, "/cancel")
-    assert isinstance(replies[-1].reply_markup, ReplyKeyboardRemove)
-    assert not await app.registration_repository.awaiting_phone(100)
+    assert replies[-1].reply_markup.keyboard[0][0].request_contact
+    assert await app.registration_repository.awaiting_phone(100)
     replies = await send(
         app, contact=Contact(phone_number="+998901234567", first_name="User", user_id=100)
     )
-    assert "Verify your Outlook email first" in replies[-1].text
+    assert "education level" in replies[-1].text
+    assert app.registrar_service.send_verification_code.await_count == 1
     assert await app.registration_repository.verified(100) is None
 
 
@@ -361,27 +437,28 @@ async def test_repeated_contact_does_not_repeat_registration(app):
 @pytest.mark.parametrize(
     "command,title", [("/new_event", "New Event"), ("/new_event Welcome Night", "Welcome Night")]
 )
-async def test_new_event_sends_qr_and_uuid_link(app, command, title):
+@pytest.mark.parametrize("mini_app_url", ["", "https://events.example.test"])
+async def test_new_event_sends_confirmation_without_registration_media(
+    app, command, title, mini_app_url
+):
+    app.dp["mini_app_url"] = mini_app_url
     await register(app)
-    await send(app, command)
-    photos = [
-        call.args[1]
-        for call in app.bot.session.call_args_list
-        if isinstance(call.args[1], SendPhoto)
-    ]
-    assert len(photos) == 1
-    photo = photos[0]
-    assert photo.photo.data.startswith(b"\x89PNG\r\n\x1a\n")
-    assert photo.caption.startswith(title)
+    replies = await send(app, command)
+    assert len(replies) == 1
+    reply = replies[0]
+    assert title in reply.text and "Event created" in reply.text
+    assert "https://t.me/" not in reply.text
+    assert methods(app, SendPhoto) == []
     async with app.database.transaction() as session:
         event = (await session.scalars(select(Event))).one()
         assert event.title == title and event.creator_telegram_user_id == 100
-        expected = f"https://t.me/test_registrar_bot?start=event_{event.id}"
-    assert expected in photo.caption
-    assert photo.reply_markup.inline_keyboard[0][0].url == expected
-    assert [button.text for row in photo.reply_markup.inline_keyboard for button in row] == [
-        "Register for event"
-    ]
+    if mini_app_url:
+        buttons = [button for row in reply.reply_markup.inline_keyboard for button in row]
+        assert len(buttons) == 1 and buttons[0].text == "Manage event"
+        assert buttons[0].web_app.url == f"{mini_app_url}/?event={event.id}"
+        assert buttons[0].url is None
+    else:
+        assert reply.reply_markup is None
 
 
 @pytest.mark.asyncio
@@ -398,12 +475,10 @@ async def test_unregistered_user_cannot_create_event(app):
 async def test_plain_new_event_text_cannot_create_event(app, registered):
     if registered:
         await register(app)
-    # Match the real lookup service's ID validation instead of accepting arbitrary text.
-    app.registrar_service.find_student.side_effect = ValueError(
-        "Student ID must contain 1 to 32 digits."
-    )
+    app.registrar_service.reset_mock()
     replies = await send(app, "New Event")
-    assert "1 to 32 digits" in replies[-1].text
+    assert ("/me" if registered else "1 to 32 digits") in replies[-1].text
+    app.registrar_service.find_student.assert_not_called()
     assert methods(app, SendPhoto) == []
     async with app.database.transaction() as session:
         assert list(await session.scalars(select(Event))) == []
@@ -425,9 +500,10 @@ async def test_event_link_enrolls_verified_student_once_without_graph_calls(app)
 
 
 @pytest.mark.asyncio
-async def test_event_link_survives_entire_student_registration(app):
+async def test_second_event_link_replaces_first_during_student_registration_without_new_code(app):
     await register(app)
     event = await app.event_repository.create(100, "Freshers Welcome")
+    second = await app.event_repository.create(100, "Second Event")
     replies = await send(app, f"/start event_{event.id}", user_id=200)
     assert "Event saved: Freshers Welcome" in replies[0].text
     assert "own student ID" in replies[-1].text
@@ -435,7 +511,12 @@ async def test_event_link_survives_entire_student_registration(app):
         "00000002", "Second Student", "second@example.test", account="00000002@example.test"
     )
     await send(app, "00000002", user_id=200)
-    await send(app, app.registrar_service.send_verification_code.await_args.args[1], user_id=200)
+    code = app.registrar_service.send_verification_code.await_args.args[1]
+    emails = app.registrar_service.send_verification_code.await_count
+    await send(app, f"/start event_{second.id}", user_id=200)
+    assert await app.event_repository.pending_titles(200) == [second.title]
+    assert app.registrar_service.send_verification_code.await_count == emails
+    await send(app, code, user_id=200)
     async with app.database.transaction() as session:
         assert list(await session.scalars(select(EventRegistration))) == []
     replies = await send(
@@ -447,10 +528,10 @@ async def test_event_link_survives_entire_student_registration(app):
     async with app.database.transaction() as session:
         assert list(await session.scalars(select(EventRegistration))) == []
     replies = await choose_level(app, user_id=200, level="6")
-    assert "Registration complete" in replies[-1].text and "Freshers Welcome" in replies[-1].text
+    assert "Registration complete" in replies[-1].text and second.title in replies[-1].text
     async with app.database.transaction() as session:
         entry = (await session.scalars(select(EventRegistration))).one()
-        assert entry.telegram_user_id == 200 and entry.event_id == event.id
+        assert entry.telegram_user_id == 200 and entry.event_id == second.id
         assert list(await session.scalars(select(PendingEventRegistration))) == []
 
 
@@ -551,13 +632,14 @@ async def test_education_callback_requires_previous_steps_and_rejects_invalid_op
 
 
 @pytest.mark.asyncio
-async def test_cancel_education_step_invalidates_old_inline_buttons(app):
+async def test_removed_cancel_keeps_education_selection_available(app):
     await reach_education_step(app)
-    await send(app, "/cancel")
+    replies = await send(app, "/cancel")
+    assert replies[-1].reply_markup.inline_keyboard[0][0].text == "CIFS"
+    assert await app.registration_repository.awaiting_education(100)
     await callback(app, "education:4")
-    assert "Confirm your email" in methods(app, AnswerCallbackQuery)[-1].text
     assert not await app.registration_repository.awaiting_education(100)
-    assert await app.registration_repository.verified(100) is None
+    assert await app.registration_repository.verified(100) is not None
 
 
 @pytest.mark.asyncio
@@ -665,15 +747,55 @@ async def test_multiselect_toggle_continue_and_skip_in_chat(app):
 
 
 @pytest.mark.asyncio
-async def test_cancel_chat_form_keeps_verified_account_and_discards_partial_answers(app):
+async def test_me_does_not_consume_answers_or_reset_the_current_questionnaire(app):
+    event = await form_event(app, [("First?", "text", True), ("Second?", "text", True)])
+    await send(app, f"/start event_{event.id}")
+    await send(app, "Partial answer")
+    before = await app.event_survey.resume(100)
+    app.registrar_service.reset_mock()
+    replies = await send(app, "/me")
+    assert PERSON.email in replies[-1].text
+    after = await app.event_survey.resume(100)
+    assert after.event.id == before.event.id and after.index == before.index
+    assert after.answers == before.answers and after.token == before.token
+    await send(app, "Final answer")
+    assert (await app.event_repository.members(100, event.id)).total == 1
+    app.registrar_service.find_student.assert_not_called()
+    app.registrar_service.send_verification_code.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_scanning_second_event_leaves_unfinished_first_questionnaire(app):
+    first = await form_event(app, [("First answer?", "text", True), ("Next?", "text", True)])
+    second = await app.event_repository.create(100, "Second event without questions")
+    await send(app, f"/start event_{first.id}")
+    await send(app, "Partial answer for the first event")
+    replies = await send(app, f"/start event_{second.id}")
+    assert "You are registered for" in replies[-1].text and second.title in replies[-1].text
+    assert not await app.event_survey.active(100)
+    assert await app.event_repository.pending_titles(100) == []
+    assert (await app.event_repository.members(100, first.id)).total == 0
+    assert (await app.event_repository.members(100, second.id)).total == 1
+    await send(app, f"/start event_{first.id}")
+    assert (await app.event_survey.resume(100)).index == 0
+
+
+@pytest.mark.asyncio
+async def test_removed_cancel_preserves_questionnaire_progress_and_verified_account(app):
     event = await form_event(app, [("First?", "text", True), ("Second?", "text", True)])
     await send(app, f"/start event_{event.id}")
     await send(app, "Partial")
+    before = await app.event_survey.resume(100)
     replies = await send(app, "/cancel")
-    assert "questionnaire cancelled" in replies[-1].text
-    assert not await app.event_survey.active(100)
+    assert "Second?" in replies[-1].text
+    after = await app.event_survey.resume(100)
+    assert after.index == before.index and after.answers == before.answers
+    assert await app.event_survey.active(100)
     assert await app.registration_repository.verified(100)
     assert (await app.event_repository.members(100, event.id)).total == 0
+    replies = await send(app, "Final answer")
+    assert "You are registered for" in replies[-1].text
+    assert (await app.event_repository.members(100, event.id)).total == 1
 
 
 @pytest.mark.asyncio
@@ -686,23 +808,44 @@ async def test_panel_and_event_management_buttons_open_mini_app_only_for_organiz
     replies = await send(app, "/panel")
     assert "/new_event" in replies[-1].text and replies[-1].reply_markup is None
     replies = await send(app, "/start")
-    assert replies[-1].reply_markup is None
+    assert len(replies) == 1
+    assert isinstance(replies[0].reply_markup, ReplyKeyboardRemove)
     replies = await send(app, "/help")
     assert "/panel" not in replies[-1].text
-    await send(app, "/new_event Welcome")
-    button = methods(app, SendPhoto)[-1].reply_markup.inline_keyboard[-1][0]
+    replies = await send(app, "/new_event Welcome")
+    button = replies[-1].reply_markup.inline_keyboard[-1][0]
     assert button.text == "Manage event" and button.web_app.url.startswith(
         app.dp["mini_app_url"] + "/?event="
     )
     replies = await send(app, "/panel")
     assert replies[-1].reply_markup.inline_keyboard[0][0].web_app.url == app.dp["mini_app_url"]
     replies = await send(app, "/start")
-    assert replies[-1].reply_markup.inline_keyboard[0][0].web_app.url == app.dp["mini_app_url"]
-    assert [button.text for row in replies[-1].reply_markup.inline_keyboard for button in row] == [
-        "Event panel"
-    ]
+    assert len(replies) == 1
+    assert isinstance(replies[0].reply_markup, ReplyKeyboardRemove)
+    assert "Your verified profile" not in replies[0].text
     replies = await send(app, "/help")
     assert "/panel" in replies[-1].text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["visitor", "student", "organizer"])
+async def test_help_responds_with_commands_for_each_registration_role(app, role):
+    app.dp["mini_app_url"] = "https://events.example.test"
+    if role != "visitor":
+        await register(app)
+    if role == "organizer":
+        await send(app, "/new_event Welcome")
+    app.registrar_service.reset_mock()
+
+    replies = await send(app, "/help")
+
+    assert len(replies) == 1
+    assert "/help" in replies[0].text and "/start" in replies[0].text
+    assert ("/resend" in replies[0].text) == (role == "visitor")
+    assert ("/panel" in replies[0].text) == (role == "organizer")
+    assert ("/me" in replies[0].text) == (role != "visitor")
+    app.registrar_service.find_student.assert_not_called()
+    app.registrar_service.send_verification_code.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -770,3 +913,22 @@ async def test_retired_event_buttons_require_own_private_chat(app, options):
     await callback(app, "member_events:0", **options)
     assert "private chat" in methods(app, AnswerCallbackQuery)[-1].text
     assert methods(app, EditMessageReplyMarkup) == [] and methods(app, SendRichMessage) == []
+
+
+@pytest.mark.asyncio
+async def test_native_command_menu_follows_registration_and_event_creation(app):
+    await send(app, "/start")
+    current = methods(app, SetMyCommands)[-1]
+    assert current.scope.chat_id == 100
+    assert "resend" in [item.command for item in current.commands]
+    assert "panel" not in [item.command for item in current.commands]
+    await register(app)
+    current = methods(app, SetMyCommands)[-1]
+    names = [item.command for item in current.commands]
+    assert {"new_event", "me"} <= set(names) and "resend" not in names and "panel" not in names
+    app.dp["mini_app_url"] = "https://events.example.test"
+    await send(app, "/new_event Welcome")
+    assert "panel" in [item.command for item in methods(app, SetMyCommands)[-1].commands]
+    count = len(methods(app, SetMyCommands))
+    await send(app, "/help")
+    assert len(methods(app, SetMyCommands)) == count
