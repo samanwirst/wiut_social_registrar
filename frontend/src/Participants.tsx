@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button, Caption, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
-import { api, errorMessage } from './api';
+import { api } from './api';
+import { useRemoteResource } from './hooks/useRemoteResource';
 import { Pagination } from './Pagination';
 import type { MembersPage } from './types';
 
@@ -9,30 +10,20 @@ function Contact({ value, prefix }: { value: string | null; prefix: string }) {
 }
 
 export function Participants({ eventId }: { eventId: string }) {
-  const [data, setData] = useState<MembersPage | null>(null);
   const [page, setPage] = useState(0);
-  const [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true); setError('');
-    api<MembersPage>(`/api/events/${eventId}/members?page=${page}`, { signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted) setData(result); })
-      .catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [eventId, page, refresh]);
+  const load = useCallback((signal: AbortSignal) =>
+    api<MembersPage>(`/api/events/${encodeURIComponent(eventId)}/members?page=${page}`, { signal }), [eventId, page]);
+  const { data, loading, error, reload } = useRemoteResource(load);
 
   return <Section className="participants" header="Participants" footer="Additional answers expire automatically. A dash means no answer is available.">
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} participants · 10 per page</Caption>
       <div className="actions">
-        <Button type="button" size="s" mode="bezeled" disabled={loading} onClick={() => setRefresh(value => value + 1)}>Refresh</Button>
+        <Button type="button" size="s" mode="bezeled" disabled={loading} onClick={reload}>Refresh</Button>
       </div>
     </div>
     {error ? <Placeholder header="Couldn't load participants" description={error} action={
-      <Button type="button" mode="bezeled" onClick={() => setRefresh(value => value + 1)}>Try again</Button>} />
+      <Button type="button" mode="bezeled" onClick={reload}>Try again</Button>} />
       : loading ? <div className="loading" role="status"><Spinner size="m" /><span>Loading participants…</span></div>
       : data && data.members.length ? <div className="scroll-table" tabIndex={0} role="region" aria-label="Participant contacts and answers">
         <table><thead><tr>{['Student ID', 'Name', 'Telegram', 'Email', 'Phone', 'Level', ...data.questions.map(q => q.label)]

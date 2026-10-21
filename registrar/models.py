@@ -36,7 +36,11 @@ class Student:
         return asdict(self)
 
     def format(self) -> str:
-        lines = [f"ID: {self.student_id}", f"Name: {self.name or 'not specified'}", f"Email: {self.email}"]
+        lines = [
+            f"ID: {self.student_id}",
+            f"Name: {self.name or 'not specified'}",
+            f"Email: {self.email}",
+        ]
         if self.account:
             lines.append(f"Account: {self.account}")
         return "\n".join(lines)

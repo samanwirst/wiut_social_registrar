@@ -1,6 +1,17 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -19,7 +30,11 @@ class UTCDateTime(TypeDecorator):
         return None
 
     def process_result_value(self, value, dialect):
-        return value.replace(tzinfo=timezone.utc) if value is not None and value.tzinfo is None else value
+        return (
+            value.replace(tzinfo=timezone.utc)
+            if value is not None and value.tzinfo is None
+            else value
+        )
 
 
 class Base(DeclarativeBase):
@@ -42,9 +57,16 @@ class OutlookProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
     def student(self) -> Student:
-        return Student(self.student_id, self.display_name or "", self.email, account=self.account,
-                       email_addresses=self.email_addresses, graph_id=self.graph_id or "",
-                       given_name=self.given_name or "", surname=self.surname or "")
+        return Student(
+            self.student_id,
+            self.display_name or "",
+            self.email,
+            account=self.account,
+            email_addresses=self.email_addresses,
+            graph_id=self.graph_id or "",
+            given_name=self.given_name or "",
+            surname=self.surname or "",
+        )
 
 
 class TelegramUser(Base):
@@ -65,7 +87,9 @@ class TelegramUser(Base):
     education_level: Mapped[str | None] = mapped_column(String(16), index=True)
     education_selected_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     registered_at: Mapped[datetime | None] = mapped_column(UTCDateTime, index=True)
-    outlook_profile_id: Mapped[int | None] = mapped_column(ForeignKey("outlook_profiles.id"), index=True)
+    outlook_profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("outlook_profiles.id"), index=True
+    )
 
 
 class VerificationChallenge(Base):
@@ -101,7 +125,9 @@ class Event(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
-    creator_telegram_user_id: Mapped[int] = mapped_column(ForeignKey("telegram_users.id"), index=True)
+    creator_telegram_user_id: Mapped[int] = mapped_column(
+        ForeignKey("telegram_users.id"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     registration_open: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
@@ -138,7 +164,8 @@ class EventAnswers(Base):
     __tablename__ = "event_answers"
 
     registration_id: Mapped[int] = mapped_column(
-        ForeignKey("event_registrations.id", ondelete="CASCADE"), primary_key=True)
+        ForeignKey("event_registrations.id", ondelete="CASCADE"), primary_key=True
+    )
     answers: Mapped[dict] = mapped_column(JSON)
     submitted_at: Mapped[datetime] = mapped_column(UTCDateTime)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
@@ -146,6 +173,7 @@ class EventAnswers(Base):
 
 class EventFormSession(Base):
     """Short-lived questionnaire progress; never part of the student's permanent profile."""
+
     __tablename__ = "event_form_sessions"
 
     telegram_user_id: Mapped[int] = mapped_column(ForeignKey("telegram_users.id"), primary_key=True)

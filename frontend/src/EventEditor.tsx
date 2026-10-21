@@ -1,56 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, MutableRefObject } from 'react';
+import { useState } from 'react';
+import type { MutableRefObject } from 'react';
 import { Button, Caption, Cell, Input, List, Section, Switch, TabsList, Textarea, Title } from '@telegram-apps/telegram-ui';
-import { api, errorMessage } from './api';
+import { useEventDraft } from './hooks/useEventDraft';
 import { Questions } from './Questions';
 import { Field } from './Field';
 import { Participants } from './Participants';
 import { EventShare } from './EventShare';
-import { supports, telegram } from './telegram';
-import type { Event, EventDetails, Notify } from './types';
+import type { EventDetails, Notify } from './types';
 
 type Tab = 'overview' | 'questions' | 'participants' | 'qr';
 
 export function EventEditor({ event, guard, notify, onSaved }: {
   event: EventDetails; guard: MutableRefObject<() => boolean>; notify: Notify; onSaved: (event: EventDetails) => void;
 }) {
-  const [draft, setDraft] = useState(() => structuredClone(event));
   const [tab, setTab] = useState<Tab>('overview');
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
-
-  useEffect(() => {
-    guard.current = () => !savingRef.current && (!dirty || window.confirm('Discard your unsaved event changes?'));
-    if (supports('6.2')) {
-      if (dirty) telegram?.enableClosingConfirmation(); else telegram?.disableClosingConfirmation();
-    }
-    const beforeUnload = (e: BeforeUnloadEvent) => { if (dirty || savingRef.current) { e.preventDefault(); e.returnValue = ''; } };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => {
-      guard.current = () => true;
-      window.removeEventListener('beforeunload', beforeUnload);
-      if (supports('6.2')) telegram?.disableClosingConfirmation();
-    };
-  }, [dirty, guard]);
-
-  const change = (value: Partial<EventDetails>) => { setDraft(previous => ({ ...previous, ...value })); setDirty(true); };
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    if (savingRef.current || !dirty) return;
-    savingRef.current = true; setSaving(true);
-    try {
-      const { title, description, registration_open, questions, response_retention_days, revision } = draft;
-      const updated = await api<Event>(`/api/events/${event.id}`, { method: 'PUT', body: JSON.stringify({
-        title, description, registration_open, questions, response_retention_days, revision,
-      }) });
-      const next = { ...updated, link: event.link };
-      onSaved(next); setDraft(structuredClone(next)); setDirty(false);
-      notify('Event updated.');
-      if (supports('6.1')) telegram?.HapticFeedback?.notificationOccurred('success');
-    } catch (error) { notify(errorMessage(error), true); }
-    finally { savingRef.current = false; setSaving(false); }
-  };
+  const { draft, dirty, saving, change, save } = useEventDraft(event, guard, onSaved, notify);
 
   return <>
     <div className="page-heading"><Title level="1" Component="h1">{event.title}</Title>

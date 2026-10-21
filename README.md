@@ -415,29 +415,39 @@ Lookup JSON contains `student_id`, `name`, `email`, `account`, `email_addresses`
 
 ## Architecture
 
-The structure follows `referral_tgbot`: `BotApp`, separate handler routers, and a service injected through middleware.
+The structure follows `referral_tgbot`: `BotApp`, separate handler routers, and injected services.
+See [architecture and responsibility boundaries](docs/architecture.md) and
+[contributor setup](CONTRIBUTING.md). Coding-agent guidance is in [AGENTS.md](AGENTS.md).
 
 ```text
 main.py                              # Telegram entry point
 config.py                            # Bot configuration
 app/bot.py                           # Bot, dispatcher, middleware, shutdown
+app/middleware.py                    # Private-chat access and shared per-user context
 app/handlers/                        # Registration, verification, and plain ID lookup
+app/dialogs/                         # Reusable registration and questionnaire chat steps
 app/services/registrar_service.py    # Graph lookups and fixed verification mail template
 app/services/registration_service.py # Registration workflow
 app/services/event_service.py        # Local PNG QR generation with Segno
 app/models.py                        # Shared SQLAlchemy models for SQLite and PostgreSQL
-app/repositories.py                  # Profiles, verification transactions, analytics events
-app/event_repository.py              # Events, idempotent enrollment, pending invitations
+app/repositories.py                  # Stable student registration lifecycle API
+app/registration/                    # Challenge persistence, hashing, profiles, analytics records
+app/event_repository.py              # Stable facade for focused event persistence components
+app/events/                          # Settings, enrollment, organizer queries, answer retention
 app/event_forms.py                   # Question and answer validation
 app/surveys.py                       # Persistent chat questionnaire progress
-app/miniapp.py                       # Authenticated aiohttp API and answer expiration job
+app/miniapp/                         # HTTP auth, routes, assets, application and TLS lifecycle
+app/services/answer_cleanup.py       # Answer expiration, independent of the HTTP server
 frontend/src/                        # React/TypeScript organizer panel using TelegramUI
+frontend/src/hooks/                  # Shared request, navigation, draft and Telegram integration
 frontend/package-lock.json           # Reproducible frontend dependency versions
 frontend/dist/                       # Generated static assets served by aiohttp (ignored)
 app/db.py                            # Async database lifecycle and migrations
 migrations/                          # Versioned Alembic schema migrations
 cli.py                               # Local console tools and sign-in
 registrar/                           # Graph client, MSAL authentication, models
+registrar/transport.py               # Graph HTTP errors and bounded retry policy
+registrar/environment.py             # Shared private dotenv reading and credential persistence
 Dockerfile                           # Runtime image and test target
 compose.yaml                         # Bot service and persistent configuration mount
 compose.production.yaml              # PostgreSQL production override
@@ -445,11 +455,19 @@ compose.miniapp.yaml                 # Optional public HTTPS reverse proxy
 compose.miniapp.local.yaml           # Loopback-only Mini App development, HTTP or direct TLS
 deploy/Caddyfile                     # Automatic TLS and Mini App proxy configuration
 tests/                               # Tests with mocked Telegram and HTTP transports
+Makefile                             # Lint, build, test, browser and Docker checks
+pyproject.toml                       # Ruff configuration
+scripts/test_postgres.py              # Disposable PostgreSQL integration-test runner
 ```
 
 Synchronous Graph and MSAL operations share one background worker, keeping Telegram's event loop responsive and serializing HTTP session access and cache writes. Database operations are asynchronous with a separate transaction per operation. The bot processes at most 16 updates concurrently and isolates updates per user. PostgreSQL row/advisory locks and SQLite write transactions protect verification and mailbox rate limits from concurrent requests.
 
 ## Tests
+
+For the complete development checks, run `make check` from an activated virtual environment
+after installing `requirements-dev.txt` and frontend packages. It runs Ruff, builds the
+frontend, and runs pytest. `make postgres-test` adds an isolated PostgreSQL container;
+`make browser` runs browser QA. See [testing.md](docs/testing.md) for setup and isolation details.
 
 Run tests in Docker without credentials:
 

@@ -2,8 +2,8 @@ import asyncio
 from datetime import timedelta
 from uuid import UUID, uuid4
 
-from aiogram.types import User
 import pytest
+from aiogram.types import User
 from sqlalchemy import select
 
 from app.db import Database
@@ -11,15 +11,20 @@ from app.event_repository import EventError, EventRepository, event_id_from_payl
 from app.models import Event, EventRegistration, PendingEventRegistration, TelegramUser
 from app.repositories import RegistrationRepository
 from registrar.models import Student
+from tests.helpers import complete_student_registration
 
 
 async def register(repository, user_id, *, student_id=None):
     student_id = student_id or f"{user_id:08}"
-    student = Student(student_id, "Test Student", student_id + "@example.test", account=student_id + "@example.test")
-    await repository.reserve_code(user_id, student, "001234")
-    await repository.consume_code(user_id, "001234")
-    await repository.save_contact(user_id, user_id, "+998901234567")
-    await repository.complete_registration(user_id, "CIFS")
+    student = Student(
+        student_id,
+        "Test Student",
+        student_id + "@example.test",
+        account=student_id + "@example.test",
+    )
+    await complete_student_registration(
+        repository, user_id, student, education_level="CIFS", code="001234"
+    )
 
 
 @pytest.fixture
@@ -83,7 +88,9 @@ async def test_same_student_with_another_telegram_account_is_not_counted_twice(r
 
 
 @pytest.mark.asyncio
-async def test_new_student_pending_events_survive_restart_and_enroll_only_after_education(repository, events):
+async def test_new_student_pending_events_survive_restart_and_enroll_only_after_education(
+    repository, events
+):
     await register(repository, 100)
     first = await events.create(100, "First")
     second = await events.create(100, "Second")
@@ -91,7 +98,11 @@ async def test_new_student_pending_events_survive_restart_and_enroll_only_after_
     await events.visit(200, first.id)
     await events.visit(200, second.id)
     assert set(await events.pending_titles(200)) == {"First", "Second"}
-    await repository.reserve_code(200, Student("00000200", "Second", "200@example.test", account="00000200@example.test"), "001234")
+    await repository.reserve_code(
+        200,
+        Student("00000200", "Second", "200@example.test", account="00000200@example.test"),
+        "001234",
+    )
     await repository.consume_code(200, "001234")
     await repository.save_contact(200, 200, "+998909999999")
     async with repository.db.transaction() as session:
@@ -114,19 +125,27 @@ async def test_new_student_pending_events_survive_restart_and_enroll_only_after_
 
 
 @pytest.mark.asyncio
-async def test_event_enrollment_and_student_registration_roll_back_together(repository, events, monkeypatch):
+async def test_event_enrollment_and_student_registration_roll_back_together(
+    repository, events, monkeypatch
+):
     await register(repository, 100)
     event = await events.create(100)
     await events.visit(200, event.id)
-    await repository.reserve_code(200, Student("00000200", "Second", "200@example.test", account="00000200@example.test"), "001234")
+    await repository.reserve_code(
+        200,
+        Student("00000200", "Second", "200@example.test", account="00000200@example.test"),
+        "001234",
+    )
     await repository.consume_code(200, "001234")
     await repository.save_contact(200, 200, "+998909999999")
     from app import repositories
+
     original = repositories.enroll_pending_events
 
     async def fail_after_enrollment(*args):
         await original(*args)
         raise RuntimeError("Simulated transaction failure")
+
     monkeypatch.setattr(repositories, "enroll_pending_events", fail_after_enrollment)
     with pytest.raises(RuntimeError):
         await repository.complete_registration(200, "Level 5")
@@ -161,8 +180,17 @@ async def test_nonexistent_event_does_not_save_pending_registration(repository, 
     assert await events.pending_titles(200) == []
 
 
-@pytest.mark.parametrize("payload", ["", "event_bad", "other_" + str(uuid4()), "event_" + str(UUID(int=0)),
-                                   "event_" + uuid4().hex, "event_" + str(uuid4()) + "?x=1"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "event_bad",
+        "other_" + str(uuid4()),
+        "event_" + str(UUID(int=0)),
+        "event_" + uuid4().hex,
+        "event_" + str(uuid4()) + "?x=1",
+    ],
+)
 def test_invalid_event_payloads_are_rejected(payload):
     with pytest.raises(EventError, match="invalid"):
         event_id_from_payload(payload)

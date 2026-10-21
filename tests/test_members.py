@@ -1,21 +1,26 @@
 from uuid import uuid4
 
-from aiogram.types import User
 import pytest
 import pytest_asyncio
+from aiogram.types import User
 
 from app.event_repository import EventError, EventRepository
 from registrar.models import Student
+from tests.helpers import complete_student_registration
 
 
 async def register(repository, user_id, education_level="CIFS"):
     await repository.touch_user(User(id=user_id, is_bot=False, first_name=f"Student {user_id}"))
     student_id = f"{user_id:08}"
-    person = Student(student_id, f"Student {user_id}", f"{student_id}@example.test", account=f"{student_id}@example.test")
-    await repository.reserve_code(user_id, person, "001234")
-    await repository.consume_code(user_id, "001234")
-    await repository.save_contact(user_id, user_id, "+998901234567")
-    await repository.complete_registration(user_id, education_level)
+    person = Student(
+        student_id,
+        f"Student {user_id}",
+        f"{student_id}@example.test",
+        account=f"{student_id}@example.test",
+    )
+    await complete_student_registration(
+        repository, user_id, person, education_level=education_level, code="001234"
+    )
 
 
 @pytest_asyncio.fixture
@@ -35,12 +40,22 @@ async def test_ten_members_per_page_have_stable_order_and_contact_fields(member_
     pages = [await events.members(100, event.id, index) for index in range(3)]
     assert [len(page.members) for page in pages] == [10, 10, 3]
     assert all(page.total == 23 and page.pages == 3 for page in pages)
-    assert [member['telegram_id'] for page in pages for member in page.members] == list(range(1000, 1023))
-    assert pages[0].members[0]['student_id'] == '00001000'
-    assert pages[0].members[0]['phone_number'] == '+998901234567'
-    assert pages[0].members[0]['education_level'] == 'CIFS'
-    assert pages[0].members[1]['education_level'] == 'Level 6'
-    expected = {'student_id', 'name', 'telegram_id', 'telegram_username', 'email', 'phone_number', 'education_level'}
+    assert [member["telegram_id"] for page in pages for member in page.members] == list(
+        range(1000, 1023)
+    )
+    assert pages[0].members[0]["student_id"] == "00001000"
+    assert pages[0].members[0]["phone_number"] == "+998901234567"
+    assert pages[0].members[0]["education_level"] == "CIFS"
+    assert pages[0].members[1]["education_level"] == "Level 6"
+    expected = {
+        "student_id",
+        "name",
+        "telegram_id",
+        "telegram_username",
+        "email",
+        "phone_number",
+        "education_level",
+    }
     assert set(pages[0].members[0]) == expected
     assert (await events.members(100, event.id, 10**8)).page == 2
     assert (await events.members(100, event.id, -1)).page == 0
@@ -52,12 +67,12 @@ async def test_member_data_is_only_available_to_the_registered_event_creator(rep
     events = EventRepository(repository.db)
     event = await events.create(100)
     await events.visit(200, event.id)
-    with pytest.raises(EventError, match='Complete registration'):
+    with pytest.raises(EventError, match="Complete registration"):
         await events.members(200, event.id)
     await register(repository, 200)
-    with pytest.raises(EventError, match='Only the event organizer'):
+    with pytest.raises(EventError, match="Only the event organizer"):
         await events.members(200, event.id)
-    with pytest.raises(EventError, match='Only the event organizer'):
+    with pytest.raises(EventError, match="Only the event organizer"):
         await events.members(100, str(uuid4()))
 
 
@@ -67,8 +82,8 @@ async def test_event_selector_only_lists_owned_events_and_supports_pagination(re
     await register(repository, 200)
     events = EventRepository(repository.db)
     for index in range(7):
-        await events.create(100, f'Event {index}')
-    other = await events.create(200, 'Other organizer event')
+        await events.create(100, f"Event {index}")
+    other = await events.create(200, "Other organizer event")
     first = await events.owned_events(100)
     second = await events.owned_events(100, 1)
     assert first.total == second.total == 7 and first.pages == 2

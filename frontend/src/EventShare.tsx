@@ -1,22 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { Button, Caption, Section, Spinner } from '@telegram-apps/telegram-ui';
-import { errorMessage, eventQr } from './api';
+import { eventQr } from './api';
+import { useObjectUrl, useRemoteResource } from './hooks/useRemoteResource';
 import type { EventDetails, Notify } from './types';
 
 export function EventShare({ event, notify }: { event: EventDetails; notify: Notify }) {
-  const [qr, setQr] = useState('');
-  const [error, setError] = useState('');
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let url = '';
-    setQr(''); setError('');
-    eventQr(event.id, controller.signal).then(blob => {
-      if (!controller.signal.aborted) { url = URL.createObjectURL(blob); setQr(url); }
-    }).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
-    return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [event.id, retry]);
+  const load = useCallback((signal: AbortSignal) => eventQr(event.id, signal), [event.id]);
+  const { data: blob, error, reload } = useRemoteResource(load);
+  const qr = useObjectUrl(blob);
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(event.link); notify('Event link copied.'); }
@@ -32,7 +23,7 @@ export function EventShare({ event, notify }: { event: EventDetails; notify: Not
     footer="Students scan this QR code with their camera. Registration and questions happen in the bot.">
     <div className="share-content">
       <div className="qr-wrap">{qr ? <img id="event-qr" src={qr} alt="Scan to register for this event" width={300} height={300} />
-        : error ? <Button type="button" mode="bezeled" onClick={() => setRetry(value => value + 1)}>Retry QR</Button>
+        : error ? <Button type="button" mode="bezeled" onClick={reload}>Retry QR</Button>
           : <Spinner size="m" />}</div>
       {error ? <Caption className="danger" role="status">{error}</Caption> : null}
       <Caption className="muted">PNG · Transparent background</Caption>

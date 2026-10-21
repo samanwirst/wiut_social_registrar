@@ -15,6 +15,7 @@ def run(connection):
 async def connect():
     from app.db import Database
     from config import BotSettings
+
     path = context.get_x_argument(as_dictionary=True).get("env_file")
     database = Database(BotSettings.load(Path(path) if path else None).database_url)
     try:

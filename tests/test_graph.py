@@ -9,8 +9,16 @@ from registrar.errors import AuthenticationError, GraphError, SendStatusUnknown
 from registrar.graph import GraphClient
 from registrar.models import Student, validate_student_id
 
-ME = {"displayName": "Sender", "mail": "sender@students.example.test", "userPrincipalName": "00000002@example.test"}
-PERSON = {"displayName": "Student", "mail": "student@students.example.test", "userPrincipalName": "00000001@example.test"}
+ME = {
+    "displayName": "Sender",
+    "mail": "sender@students.example.test",
+    "userPrincipalName": "00000002@example.test",
+}
+PERSON = {
+    "displayName": "Student",
+    "mail": "student@students.example.test",
+    "userPrincipalName": "00000001@example.test",
+}
 
 
 def response(status=200, data=None, headers=None):
@@ -35,16 +43,26 @@ def test_exact_lookup_caches_profile_and_student_and_reuses_session(client, capl
         student = client.find_student(" 00000001 ")
         assert client.find_student("00000001") is student
     assert student.to_dict() == {
-        "student_id": "00000001", "name": "Student", "email": "student@students.example.test",
-        "account": "00000001@example.test", "email_addresses": ["student@students.example.test", "00000001@example.test"],
+        "student_id": "00000001",
+        "name": "Student",
+        "email": "student@students.example.test",
+        "account": "00000001@example.test",
+        "email_addresses": ["student@students.example.test", "00000001@example.test"],
         "source": "microsoft_graph",
-        "graph_id": "", "given_name": "", "surname": "",
+        "graph_id": "",
+        "given_name": "",
+        "surname": "",
     }
     calls = client.session.request.call_args_list
     assert len(calls) == 2
     assert calls[0].args == ("GET", "https://graph.microsoft.com/v1.0/me")
-    assert calls[1].args == ("GET", "https://graph.microsoft.com/v1.0/users/00000001%40example.test")
-    assert calls[1].kwargs["params"] == {"$select": "id,displayName,givenName,surname,mail,userPrincipalName"}
+    assert calls[1].args == (
+        "GET",
+        "https://graph.microsoft.com/v1.0/users/00000001%40example.test",
+    )
+    assert calls[1].kwargs["params"] == {
+        "$select": "id,displayName,givenName,surname,mail,userPrincipalName"
+    }
     assert calls[1].kwargs["allow_redirects"] is False
     assert calls[1].kwargs["timeout"] == (5, 15)
     assert "SENT GET" in caplog.text and "HTTP 200" in caplog.text and "CACHE" in caplog.text
@@ -70,13 +88,18 @@ def test_not_found_does_not_cache_old_student(client):
 
 @pytest.mark.parametrize("status", [403, 500])
 def test_lookup_error_is_not_not_found(client, status):
-    client.session.request.side_effect = [response(data=ME), response(status, {"error": {"code": "Denied", "message": "private-response"}})]
+    client.session.request.side_effect = [
+        response(data=ME),
+        response(status, {"error": {"code": "Denied", "message": "private-response"}}),
+    ]
     with pytest.raises(GraphError, match=f"HTTP {status}") as error:
         client.find_student("00000001")
     assert "private-response" not in str(error.value)
 
 
-@pytest.mark.parametrize("data", [[], {"userPrincipalName": "00000003@example.test"}, {**PERSON, "mail": "invalid"}])
+@pytest.mark.parametrize(
+    "data", [[], {"userPrincipalName": "00000003@example.test"}, {**PERSON, "mail": "invalid"}]
+)
 def test_malformed_or_wrong_student_never_used(client, data):
     client.session.request.side_effect = [response(data=ME), response(data=data)]
     with pytest.raises(GraphError):
@@ -92,20 +115,31 @@ def test_account_check_applies_with_domain_override(client):
 
 
 def test_upn_used_when_mail_missing(client):
-    client.session.request.side_effect = [response(data=ME), response(data={**PERSON, "mail": None})]
+    client.session.request.side_effect = [
+        response(data=ME),
+        response(data={**PERSON, "mail": None}),
+    ]
     assert client.find_student("00000001").email == PERSON["userPrincipalName"]
 
 
 def test_401_refreshes_once(client):
     client.session.request.side_effect = [response(401), response(data=ME), response(data=PERSON)]
     assert client.find_student("00000001").name == "Student"
-    assert [c.kwargs["refresh"] for c in client.auth.get_token.call_args_list] == [False, True, False]
+    assert [c.kwargs["refresh"] for c in client.auth.get_token.call_args_list] == [
+        False,
+        True,
+        False,
+    ]
 
 
 def test_throttled_read_obeys_retry_after(client, monkeypatch):
     sleep = Mock()
     monkeypatch.setattr("registrar.graph.time.sleep", sleep)
-    client.session.request.side_effect = [response(429, headers={"Retry-After": "2"}), response(data=ME), response(data=PERSON)]
+    client.session.request.side_effect = [
+        response(429, headers={"Retry-After": "2"}),
+        response(data=ME),
+        response(data=PERSON),
+    ]
     assert client.find_student("00000001")
     sleep.assert_called_once_with(2)
 
@@ -113,19 +147,29 @@ def test_throttled_read_obeys_retry_after(client, monkeypatch):
 def test_mail_preview_never_submits_and_send_uses_current_account(client):
     student = client.find_student("00000001")
     preview = client.mail_preview(student, " Subject ", "Body\nSecond line")
-    assert preview == {"from": ME["mail"], "to": PERSON["mail"], "subject": "Subject", "body": "Body\nSecond line"}
+    assert preview == {
+        "from": ME["mail"],
+        "to": PERSON["mail"],
+        "subject": "Subject",
+        "body": "Body\nSecond line",
+    }
     assert client.session.request.call_count == 2
     client.session.request.side_effect = [response(202)]
     client.send_email(student, " Subject ", "Body\nSecond line")
     sent = client.session.request.call_args
     assert sent.args == ("POST", "https://graph.microsoft.com/v1.0/me/sendMail")
-    assert sent.kwargs["json"] == {"message": {
-        "subject": "Subject", "body": {"contentType": "Text", "content": "Body\nSecond line"},
-        "toRecipients": [{"emailAddress": {"address": PERSON["mail"]}}],
-    }}
+    assert sent.kwargs["json"] == {
+        "message": {
+            "subject": "Subject",
+            "body": {"contentType": "Text", "content": "Body\nSecond line"},
+            "toRecipients": [{"emailAddress": {"address": PERSON["mail"]}}],
+        }
+    }
 
 
-@pytest.mark.parametrize("failure", [requests.Timeout("private-token"), response(503), response(408), response(200)])
+@pytest.mark.parametrize(
+    "failure", [requests.Timeout("private-token"), response(503), response(408), response(200)]
+)
 def test_ambiguous_send_is_never_retried(client, failure):
     student = client.find_student("00000001")
     client.session.request.reset_mock()
@@ -146,7 +190,9 @@ def test_rejected_send_is_not_retried(client, status):
     assert client.session.request.call_count == 1
 
 
-@pytest.mark.parametrize("subject,body", [("", "Body"), ("Title\nBcc: other", "Body"), ("Title", "  ")])
+@pytest.mark.parametrize(
+    "subject,body", [("", "Body"), ("Title\nBcc: other", "Body"), ("Title", "  ")]
+)
 def test_invalid_mail_does_not_connect(client, subject, body):
     with pytest.raises(ValueError):
         client.send_email(Student("1", "Student", "student@example.test"), subject, body)

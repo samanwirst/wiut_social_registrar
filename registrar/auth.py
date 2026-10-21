@@ -14,7 +14,9 @@ SCOPES = ["User.Read", "User.ReadBasic.All", "Mail.Send"]
 class TokenProvider:
     """Microsoft's public-client flow, with its renewable cache kept in .env."""
 
-    def __init__(self, settings: Settings, status: Callable[[str], None], *, interactive: bool = True):
+    def __init__(
+        self, settings: Settings, status: Callable[[str], None], *, interactive: bool = True
+    ):
         self.settings = settings
         self.status = status
         self.interactive = interactive
@@ -31,7 +33,9 @@ class TokenProvider:
             try:
                 self.cache.deserialize(self.settings.load_cache())
             except (ValueError, TypeError, KeyError):
-                raise AuthenticationError("The token cache is corrupted. Run cli.py --login.") from None
+                raise AuthenticationError(
+                    "The token cache is corrupted. Run cli.py --login."
+                ) from None
         self.app = msal.PublicClientApplication(
             self.settings.client_id,
             authority=f"https://login.microsoftonline.com/{self.settings.tenant_id}",
@@ -47,8 +51,14 @@ class TokenProvider:
     def _silent(self, *, refresh: bool = False):
         accounts = self.app.get_accounts(username=self.settings.account or None)
         if len(accounts) > 1:
-            raise AuthenticationError("The cache contains multiple accounts. Set GRAPH_ACCOUNT in .env.")
-        return self.app.acquire_token_silent(SCOPES, account=accounts[0], force_refresh=refresh) if accounts else None
+            raise AuthenticationError(
+                "The cache contains multiple accounts. Set GRAPH_ACCOUNT in .env."
+            )
+        return (
+            self.app.acquire_token_silent(SCOPES, account=accounts[0], force_refresh=refresh)
+            if accounts
+            else None
+        )
 
     def login(self, *, force: bool = False) -> str:
         try:
@@ -56,17 +66,25 @@ class TokenProvider:
             result = None if force else self._silent()
             if not result or "access_token" not in result:
                 if not self.interactive:
-                    raise AuthenticationError("Outlook sign-in is required. Run python cli.py --login on the bot host.")
+                    raise AuthenticationError(
+                        "Outlook sign-in is required. Run python cli.py --login on the bot host."
+                    )
                 flow = self.app.initiate_device_flow(scopes=SCOPES)
                 if "user_code" not in flow:
-                    raise AuthenticationError("Microsoft did not allow sign-in. Check the application's public client settings.")
+                    raise AuthenticationError(
+                        "Microsoft did not allow sign-in. Check the application's public client settings."
+                    )
                 self.status(flow["message"])
                 result = self.app.acquire_token_by_device_flow(flow)
             if not result or "access_token" not in result:
-                raise AuthenticationError("Sign-in failed or permissions were not granted. Run cli.py --login again.")
+                raise AuthenticationError(
+                    "Sign-in failed or permissions were not granted. Run cli.py --login again."
+                )
             return result["access_token"]
         except requests.RequestException:
-            raise AuthenticationError("Could not connect to the Microsoft sign-in service.") from None
+            raise AuthenticationError(
+                "Could not connect to the Microsoft sign-in service."
+            ) from None
         finally:
             self._save()
 

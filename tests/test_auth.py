@@ -107,7 +107,15 @@ def test_cache_only_written_to_private_env(tmp_path):
     assert Settings.load(path).load_cache() == "{}"
 
 
-@pytest.mark.parametrize("value", ["secret-bad-cache", base64.b64encode(b"not-json").decode(), base64.b64encode(b"[]").decode(), base64.b64encode(b"\xff").decode()])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "secret-bad-cache",
+        base64.b64encode(b"not-json").decode(),
+        base64.b64encode(b"[]").decode(),
+        base64.b64encode(b"\xff").decode(),
+    ],
+)
 def test_bad_cache_errors_hide_value(tmp_path, value):
     settings = Settings(tmp_path / ".env", token_cache_b64=value)
     with pytest.raises(ConfigurationError) as error:
@@ -115,7 +123,18 @@ def test_bad_cache_errors_hide_value(tmp_path, value):
     assert value not in str(error.value)
 
 
-@pytest.mark.parametrize("line", ["GRAPH_TIMEOUT_SECONDS=nan", "GRAPH_TIMEOUT_SECONDS=-1", "GRAPH_CACHE_TTL_SECONDS=inf", "GRAPH_CLIENT_ID=invalid", "GRAPH_TENANT_ID=invalid", "GRAPH_STUDENT_DOMAIN=bad/path", "GRAPH_DEBUG=maybe"])
+@pytest.mark.parametrize(
+    "line",
+    [
+        "GRAPH_TIMEOUT_SECONDS=nan",
+        "GRAPH_TIMEOUT_SECONDS=-1",
+        "GRAPH_CACHE_TTL_SECONDS=inf",
+        "GRAPH_CLIENT_ID=invalid",
+        "GRAPH_TENANT_ID=invalid",
+        "GRAPH_STUDENT_DOMAIN=bad/path",
+        "GRAPH_DEBUG=maybe",
+    ],
+)
 def test_invalid_configuration_is_rejected(tmp_path, line):
     path = tmp_path / ".env"
     path.write_text(line)

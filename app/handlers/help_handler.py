@@ -4,8 +4,11 @@ from aiogram.types import Message
 
 
 async def cmd_help(message: Message, can_open_panel=False) -> None:
-    panel_help = ("/panel opens the organizer Mini App to edit events and questions and view participants and answers.\n\n"
-                  if can_open_panel else "")
+    panel_help = (
+        "/panel opens the organizer Mini App to edit events and questions and view participants and answers.\n\n"
+        if can_open_panel
+        else ""
+    )
     await message.answer(
         "Registration\n\n"
         "1. Send your student ID as text. Keep any leading zeroes.\n"

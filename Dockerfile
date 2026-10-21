@@ -35,8 +35,11 @@ USER root
 COPY requirements-dev.txt ./
 RUN python -m pip install --no-cache-dir -r requirements-dev.txt
 COPY tests/ ./tests/
+COPY pyproject.toml ./
 USER app
-RUN python -m pytest -q -p no:cacheprovider
+RUN python -m ruff check --no-cache . \
+    && python -m ruff format --check --no-cache . \
+    && python -m pytest -q -p no:cacheprovider
 
 FROM base AS runtime
 COPY README.md LICENSE ./

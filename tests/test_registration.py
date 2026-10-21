@@ -2,19 +2,27 @@ import asyncio
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
 from aiogram.types import User
 from alembic import command
 from alembic.config import Config
-import pytest
 from sqlalchemy import select, text
 
 from app.db import Database
 from app.models import OutlookProfile, RegistrationEvent, TelegramUser, VerificationChallenge
+from app.registration.profiles import upsert_outlook_profile
 from app.repositories import RegistrationError, RegistrationRepository
 from registrar.models import Student
 
-PERSON = Student("00000001", "First Student", "student@example.test", account="00000001@example.test",
-                 graph_id="student-graph-id", given_name="First", surname="Student")
+PERSON = Student(
+    "00000001",
+    "First Student",
+    "student@example.test",
+    account="00000001@example.test",
+    graph_id="student-graph-id",
+    given_name="First",
+    surname="Student",
+)
 
 
 @pytest.mark.asyncio
@@ -45,16 +53,28 @@ async def test_complete_registration_persists_meaningful_profiles_and_events(rep
         assert user.first_name == "First" and user.username == "user_100"
         assert user.language_code == "en" and user.is_premium
         assert user.verified_at is not None and user.outlook_profile_id is not None
-        assert user.verified_at < user.phone_shared_at < user.registered_at == user.education_selected_at
+        assert (
+            user.verified_at
+            < user.phone_shared_at
+            < user.registered_at
+            == user.education_selected_at
+        )
         assert user.education_level == "Level 4"
         assert user.phone_number == "+998901234567"
         profile = await session.get(OutlookProfile, user.outlook_profile_id)
         assert profile.graph_id == PERSON.graph_id and profile.given_name == "First"
         assert await session.get(VerificationChallenge, 100) is None
-        events = list((await session.scalars(select(RegistrationEvent).order_by(RegistrationEvent.id))).all())
-        assert [event.event_type for event in events] == ["verification_requested", "verification_email_accepted",
-                                                        "verification_succeeded", "phone_shared",
-                                                        "education_level_selected", "registration_completed"]
+        events = list(
+            (await session.scalars(select(RegistrationEvent).order_by(RegistrationEvent.id))).all()
+        )
+        assert [event.event_type for event in events] == [
+            "verification_requested",
+            "verification_email_accepted",
+            "verification_succeeded",
+            "phone_shared",
+            "education_level_selected",
+            "registration_completed",
+        ]
         assert "001234" not in str([event.details for event in events])
         assert "998901234567" not in str([event.details for event in events])
     await repository.db.migrate()
@@ -70,7 +90,9 @@ async def test_profile_refresh_preserves_first_seen_and_verification(repository)
     await repository.save_contact(100, 100, "+998901234567")
     await repository.complete_registration(100, "CIFS")
     repository.test_clock[0] += timedelta(days=1)
-    await repository.touch_user(User(id=100, is_bot=False, first_name="Updated", language_code="ru"))
+    await repository.touch_user(
+        User(id=100, is_bot=False, first_name="Updated", language_code="ru")
+    )
     async with repository.db.transaction() as session:
         user = await session.get(TelegramUser, 100)
         assert user.created_at < user.last_seen_at
@@ -136,8 +158,11 @@ async def test_cooldown_and_hourly_limits_apply_to_user_and_mailbox(repository):
 
 @pytest.mark.asyncio
 async def test_concurrent_recipient_requests_reserve_only_one_code(repository):
-    results = await asyncio.gather(repository.reserve_code(100, PERSON, "001234"),
-                                   repository.reserve_code(200, PERSON, "005678"), return_exceptions=True)
+    results = await asyncio.gather(
+        repository.reserve_code(100, PERSON, "001234"),
+        repository.reserve_code(200, PERSON, "005678"),
+        return_exceptions=True,
+    )
     assert sum(isinstance(result, str) for result in results) == 1
     assert sum(isinstance(result, RegistrationError) for result in results) == 1
 
@@ -164,11 +189,19 @@ async def test_phone_cannot_complete_registration_before_email_verification(repo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("contact_user_id,phone", [
-    (200, "+998901234567"), (None, "+998901234567"),
-    (100, ""), (100, "not-a-number"), (100, "+1234567890123456"),
-])
-async def test_invalid_or_foreign_contacts_do_not_finish_registration(repository, contact_user_id, phone):
+@pytest.mark.parametrize(
+    "contact_user_id,phone",
+    [
+        (200, "+998901234567"),
+        (None, "+998901234567"),
+        (100, ""),
+        (100, "not-a-number"),
+        (100, "+1234567890123456"),
+    ],
+)
+async def test_invalid_or_foreign_contacts_do_not_finish_registration(
+    repository, contact_user_id, phone
+):
     await repository.reserve_code(100, PERSON, "001234")
     await repository.consume_code(100, "001234")
     with pytest.raises(RegistrationError):
@@ -201,11 +234,15 @@ async def test_phone_stage_survives_restart_and_does_not_require_another_code(re
 
 
 @pytest.mark.asyncio
-async def test_repeated_and_concurrent_contacts_save_once_without_finishing_registration(repository):
+async def test_repeated_and_concurrent_contacts_save_once_without_finishing_registration(
+    repository,
+):
     await repository.reserve_code(100, PERSON, "001234")
     await repository.consume_code(100, "001234")
-    await asyncio.gather(repository.save_contact(100, 100, "+998901234567"),
-                         repository.save_contact(100, 100, "+998901234567"))
+    await asyncio.gather(
+        repository.save_contact(100, 100, "+998901234567"),
+        repository.save_contact(100, 100, "+998901234567"),
+    )
     repository.test_clock[0] += timedelta(seconds=30)
     await repository.save_contact(100, 100, "+998909999999")
     async with repository.db.transaction() as session:
@@ -213,8 +250,13 @@ async def test_repeated_and_concurrent_contacts_save_once_without_finishing_regi
         assert user.phone_number == "+998901234567"
         assert user.phone_shared_at == repository.clock() - timedelta(seconds=30)
         assert user.registered_at is None and user.education_level is None
-        events = list((await session.scalars(select(RegistrationEvent).where(
-            RegistrationEvent.event_type == "phone_shared"))).all())
+        events = list(
+            (
+                await session.scalars(
+                    select(RegistrationEvent).where(RegistrationEvent.event_type == "phone_shared")
+                )
+            ).all()
+        )
         assert len(events) == 1
 
 
@@ -242,19 +284,31 @@ async def test_cancel_phone_stage_clears_email_association_and_preserves_rate_li
 async def test_existing_email_verified_user_migrates_to_phone_step(tmp_path):
     db = Database("sqlite+aiosqlite:///" + str(tmp_path / "legacy.sqlite3"))
     try:
+
         def legacy_schema(connection):
             config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
             config.attributes["connection"] = connection
             command.upgrade(config, "0001_registration")
+
         async with db.engine.begin() as connection:
             await connection.run_sync(legacy_schema)
         repository = RegistrationRepository(db, "ab" * 32)
         async with db.transaction(write=True) as session:
-            profile_id = await repository._profile(session, PERSON)
-            await session.execute(text(
-                "INSERT INTO telegram_users (id, first_name, created_at, last_seen_at, profile_updated_at, "
-                "verified_at, outlook_profile_id) VALUES (:id, :name, :now, :now, :now, :now, :profile_id)"
-            ), {"id": 100, "name": "First", "now": repository.clock().isoformat(), "profile_id": profile_id})
+            profile_id = await upsert_outlook_profile(
+                session, repository.insert, PERSON, repository.clock()
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO telegram_users (id, first_name, created_at, last_seen_at, profile_updated_at, "
+                    "verified_at, outlook_profile_id) VALUES (:id, :name, :now, :now, :now, :now, :profile_id)"
+                ),
+                {
+                    "id": 100,
+                    "name": "First",
+                    "now": repository.clock().isoformat(),
+                    "profile_id": profile_id,
+                },
+            )
         await db.migrate()
         await db.migrate()
         assert await repository.awaiting_phone(100)
@@ -268,7 +322,9 @@ async def test_existing_email_verified_user_migrates_to_phone_step(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("level", ["CIFS", "Level 4", "Level 5", "Level 6"])
-async def test_education_level_is_required_to_finish_registration_and_is_persisted(repository, level):
+async def test_education_level_is_required_to_finish_registration_and_is_persisted(
+    repository, level
+):
     with pytest.raises(RegistrationError, match="Confirm your email"):
         await repository.complete_registration(100, level)
     await repository.reserve_code(100, PERSON, "001234")
@@ -305,15 +361,25 @@ async def test_concurrent_education_selection_finishes_once_and_cannot_overwrite
     await repository.reserve_code(100, PERSON, "001234")
     await repository.consume_code(100, "001234")
     await repository.save_contact(100, 100, "+998901234567")
-    results = await asyncio.gather(repository.complete_registration(100, "CIFS"),
-                                   repository.complete_registration(100, "Level 6"), return_exceptions=True)
+    results = await asyncio.gather(
+        repository.complete_registration(100, "CIFS"),
+        repository.complete_registration(100, "Level 6"),
+        return_exceptions=True,
+    )
     assert sum(isinstance(result, Student) for result in results) == 1
     assert sum(isinstance(result, RegistrationError) for result in results) == 1
     async with repository.db.transaction() as session:
         user = await session.get(TelegramUser, 100)
         level, timestamp = user.education_level, user.education_selected_at
-        events = list((await session.scalars(select(RegistrationEvent).where(
-            RegistrationEvent.event_type == "registration_completed"))).all())
+        events = list(
+            (
+                await session.scalars(
+                    select(RegistrationEvent).where(
+                        RegistrationEvent.event_type == "registration_completed"
+                    )
+                )
+            ).all()
+        )
         assert len(events) == 1
     repository.test_clock[0] += timedelta(days=1)
     with pytest.raises(RegistrationError, match="already registered"):
@@ -348,24 +414,33 @@ async def test_education_stage_survives_restart_and_cancel_clears_the_pending_id
 
 
 @pytest.mark.asyncio
-async def test_existing_registered_user_migrates_to_education_step_without_losing_registration(tmp_path):
+async def test_existing_registered_user_migrates_to_education_step_without_losing_registration(
+    tmp_path,
+):
     db = Database("sqlite+aiosqlite:///" + str(tmp_path / "legacy-education.sqlite3"))
     repository = RegistrationRepository(db, "ab" * 32)
     try:
+
         def legacy_schema(connection):
             config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
             config.attributes["connection"] = connection
             command.upgrade(config, "0003_events")
+
         async with db.engine.begin() as connection:
             await connection.run_sync(legacy_schema)
         now = repository.clock() - timedelta(days=1)
         async with db.transaction(write=True) as session:
-            profile_id = await repository._profile(session, PERSON)
-            await session.execute(text(
-                "INSERT INTO telegram_users (id, first_name, created_at, last_seen_at, profile_updated_at, "
-                "verified_at, outlook_profile_id, phone_number, phone_shared_at, registered_at) "
-                "VALUES (100, 'First', :now, :now, :now, :now, :profile, '+998901234567', :now, :now)"
-            ), {"now": now.isoformat(), "profile": profile_id})
+            profile_id = await upsert_outlook_profile(
+                session, repository.insert, PERSON, repository.clock()
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO telegram_users (id, first_name, created_at, last_seen_at, profile_updated_at, "
+                    "verified_at, outlook_profile_id, phone_number, phone_shared_at, registered_at) "
+                    "VALUES (100, 'First', :now, :now, :now, :now, :profile, '+998901234567', :now, :now)"
+                ),
+                {"now": now.isoformat(), "profile": profile_id},
+            )
             repository._event(session, 100, "registration_completed", profile_id)
         await db.migrate()
         await db.migrate()
@@ -377,8 +452,15 @@ async def test_existing_registered_user_migrates_to_education_step_without_losin
             user = await session.get(TelegramUser, 100)
             assert user.registered_at == now and user.phone_shared_at == now
             assert user.education_level == "Level 6" and user.education_selected_at > now
-            events = list((await session.scalars(select(RegistrationEvent).where(
-                RegistrationEvent.event_type == "registration_completed"))).all())
+            events = list(
+                (
+                    await session.scalars(
+                        select(RegistrationEvent).where(
+                            RegistrationEvent.event_type == "registration_completed"
+                        )
+                    )
+                ).all()
+            )
             assert len(events) == 1
     finally:
         await db.close()

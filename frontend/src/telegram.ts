@@ -22,12 +22,22 @@ declare global {
 export const telegram = window.Telegram?.WebApp;
 export const supports = (version: string) => telegram?.isVersionAtLeast?.(version) !== false;
 
-export function useTelegramTheme() {
-  const preferred = window.matchMedia('(prefers-color-scheme: dark)');
-  const current = () => telegram?.colorScheme ?? (preferred.matches ? 'dark' : 'light');
-  const [appearance, setAppearance] = useState<'light' | 'dark'>(current);
+export function useTelegramBack(visible: boolean, onBack: () => void) {
   useEffect(() => {
-    const update = () => setAppearance(current());
+    if (!supports('6.1')) return;
+    if (visible) telegram?.BackButton?.show(); else telegram?.BackButton?.hide();
+    telegram?.BackButton?.onClick(onBack);
+    return () => { telegram?.BackButton?.offClick?.(onBack); telegram?.BackButton?.hide(); };
+  }, [visible, onBack]);
+}
+
+const preferred = window.matchMedia('(prefers-color-scheme: dark)');
+const currentAppearance = () => telegram?.colorScheme ?? (preferred.matches ? 'dark' : 'light');
+
+export function useTelegramTheme() {
+  const [appearance, setAppearance] = useState<'light' | 'dark'>(currentAppearance);
+  useEffect(() => {
+    const update = () => setAppearance(currentAppearance());
     telegram?.onEvent('themeChanged', update);
     preferred.addEventListener('change', update);
     return () => {

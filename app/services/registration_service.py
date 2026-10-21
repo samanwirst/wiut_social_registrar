@@ -14,12 +14,16 @@ class RegistrationService:
         student_id = validate_student_id(student_id)
         student = await self.registrar.find_student(student_id, refresh=True)
         if student is None:
-            await self.repository.event(user_id, "registration_student_not_found", requested_student_id=student_id)
+            await self.repository.event(
+                user_id, "registration_student_not_found", requested_student_id=student_id
+            )
             raise RegistrationError("No student found with this ID. Check the ID and try again.")
         code = f"{secrets.randbelow(1000000):06d}"
         nonce = await self.repository.reserve_code(user_id, student, code)
         try:
-            await self.registrar.send_verification_code(student, code, self.repository.CODE_TTL_SECONDS)
+            await self.registrar.send_verification_code(
+                student, code, self.repository.CODE_TTL_SECONDS
+            )
         except SendStatusUnknown:
             await self.repository.mark_email(user_id, nonce, "unknown")
             return "unknown"
