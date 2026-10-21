@@ -21,3 +21,5 @@ build
 .vscode
 *.log
 **/*.sqlite3*
+**/node_modules
+frontend/dist

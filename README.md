@@ -1,6 +1,6 @@
 # WIUT Social Registrar
 
-A Telegram bot for student registration and profile lookup. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
+A Telegram bot for student registration and profile lookup. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
 
 Registration is open to everyone in private chats. Verification emails use a fixed template; Telegram users cannot send arbitrary emails. Registered users can look up profiles by sending an ID as text. The Graph core also provides local console email tools.
 
@@ -13,7 +13,7 @@ You need:
 - Docker Engine with Docker Compose v2+, or Docker Desktop. Python is installed inside the image.
 - A Telegram bot token from [BotFather](https://t.me/BotFather).
 - A work or school Microsoft account and a Microsoft Entra public-client application in its tenant. Your tenant must allow the required app registration and delegated user consent.
-- Outbound HTTPS access to Telegram, Microsoft sign-in, and Microsoft Graph. No inbound ports or domain are required. SQLite runs locally; the production Compose configuration includes PostgreSQL.
+- Outbound HTTPS access to Telegram, Microsoft sign-in, and Microsoft Graph. The chat bot needs no inbound ports or domain. The optional organizer Mini App needs an address reachable from the Telegram device: local HTTPS works for development; public HTTPS supports other devices and production. SQLite runs locally; the production Compose configuration includes PostgreSQL.
 
 Download and extract the project archive, or clone the repository:
 
@@ -93,13 +93,150 @@ docker compose up -d bot
 docker compose logs --tail=50 -f bot
 ```
 
-The check applies database migrations and verifies Telegram and Outlook, then exits without consuming Telegram updates. Open your bot in a private Telegram chat, send `/start`, then your student ID with any leading zeroes. Open Outlook and send the emailed six-digit code back to the bot. A matching code verifies your email and opens the **Share phone number** button. Tap it and confirm sharing your own Telegram contact to complete registration and display your profile.
+The check applies database migrations and verifies Telegram and Outlook, then exits without consuming Telegram updates. Open your bot in a private Telegram chat, send `/start`, then your student ID with any leading zeroes. Open Outlook and send the emailed six-digit code back to the bot. A matching code verifies your email and opens the **Share phone number** button. Tap it and confirm sharing your own Telegram contact. Then select **CIFS**, **Level 4**, **Level 5**, or **Level 6** using the inline buttons to complete registration and display your profile.
 
-The bot uses the official [Telegram contact request button](https://core.telegram.org/bots/api#keyboardbutton). It accepts a contact only when its Telegram user ID matches the sender; forwarded contacts, other people's contacts, and numbers typed as text do not complete registration. The phone step survives restarts, and `/start` restores the button without emailing another code. Existing email-verified users are also asked to share their phone number once before using profile lookup.
+The bot uses the official [Telegram contact request button](https://core.telegram.org/bots/api#keyboardbutton). It accepts a contact only when its Telegram user ID matches the sender; forwarded contacts, other people's contacts, and numbers typed as text do not complete registration. The phone step survives restarts, and `/start` restores the button without emailing another code. Existing email-verified users are also asked to share their phone number once before using profile lookup. This temporary reply keyboard is removed after the contact is saved. It is the only reply keyboard: Telegram supports `request_contact` only on reply buttons; all menu, education, and event navigation buttons are inline.
+
+The education step also survives restarts. `/start` restores its inline buttons; typing a level as text does not select it. Existing registered users without a saved education level are asked to choose it once, while their verified email, phone, original registration time, and event participation are preserved. Repeated clicks cannot overwrite a completed selection. `/cancel` clears an unfinished registration, including a phone number shared during that attempt.
 
 Codes expire after 10 minutes and allow five incorrect attempts. `/resend` issues a new code and invalidates the old one; `/cancel` clears the pending registration so you can enter another ID. Requests have a 60-second cooldown and a limit of five per hour for a Telegram user or mailbox. Restarting the bot preserves pending codes, limits, and completed registrations.
 
-After registration, `/start` shows your own profile without sending another email. Plain student IDs still perform lookups. `/help` explains the workflow.
+After registration, `/start` shows your own profile without sending another email. Event organizers also see the inline **Event panel** button when the Mini App is configured. It also removes reply keyboards left by older bot versions. Plain student IDs still perform lookups. `/help` explains the workflow.
+
+### Events and QR registration
+
+Registered students create events using `/new_event Welcome Night` (name up to 200 characters). `/new_event` without a name creates an event named "New Event". Event creation is available only through this command; there is no New Event button or plain-text shortcut. The bot saves the event and returns a PNG QR code, a clickable link, and an inline **Register for event** button, plus **Manage event** when the Mini App is configured. Each event has a random UUID; the bot username is discovered through Telegram rather than configured in the source.
+
+Scan the QR with an ordinary phone camera and open the HTTPS link. It takes the student into the bot using a [Telegram deep link](https://core.telegram.org/bots/features#deep-linking), such as `https://t.me/your_bot?start=event_<uuid>`. Telegram may ask the student to press **Start** before delivering the link to the bot.
+
+- A fully registered student is enrolled immediately if the event has no questions. Otherwise the bot asks the event's questions in chat before enrolling them.
+- A new student is asked for their student ID, Outlook code, own Telegram contact, and current education level. The event is saved while they register. Selecting their education level completes student registration and enrolls them into saved events without questions. Saved events with questions continue into a chat questionnaire.
+- Pending invitations survive restarts, including invitations to several events. `/cancel` cancels unfinished student registration and clears its pending event invitations.
+- Repeated scans, concurrent requests, and another Telegram account linked to the same Outlook profile do not create duplicate participation. The organizer is enrolled only if they also open the event link.
+
+Creating events is available to all registered users in private chats. Event links enroll the person who opens them.
+
+### Organizer Mini App and event questionnaires
+
+Create an event with `/new_event Event name`, then open **Manage event** below its QR code, **Event panel** below your profile, or `/panel`. Event creation remains a bot command. The Mini App configures existing events and displays their participant tables.
+
+The Mini App becomes available only after a student **successfully creates their first event with `/new_event`**. Ordinary students do not see Mini App buttons or its help entry; `/panel` asks them to create an event first. Attending someone else's event does not unlock the panel. This permission is checked on every API request as well, so an old or shared Mini App link cannot bypass it. Organizer status is derived from saved event ownership and survives bot restarts.
+
+The organizer workspace provides:
+
+- Event name and description, and an open/closed registration switch.
+- A dedicated **QR** tab with a copyable registration link and a downloadable **PNG with a transparent background**. QR images load only when this tab is opened; the other pages focus on editing and participants.
+- Up to **20 questions**, with **Text response (TR)** and **Multiple choice (MC)** answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
+- A participant table with **10 rows per page**, contact details, Level, and one column per question. **Refresh** fetches current answers. Answers expire automatically according to the event's retention period.
+- Automatic expiration of extra answers after **30 days by default**. Retention is managed by the server.
+
+Set up questions **before sharing the QR code**. Events start open and have no questions, preserving immediate enrollment until questions are added. Students already enrolled are not asked to register again; their extra answer cells show a dash.
+
+Students fill questionnaires **inside the bot chat**, not in the Mini App. The bot sends one question at a time. Text and number questions accept a message; single-choice questions use inline options; multiple-choice questions toggle inline options and then use **Continue**. Optional questions have **Skip**. `/start` restores progress, and `/cancel` discards the current questionnaire without changing the verified student account. Another event QR opened during a questionnaire is saved for later. Saved questionnaires continue one at a time after the previous event is completed.
+
+Unfinished answers are stored separately in `event_form_sessions` for **one hour of inactivity**, so restarts do not lose progress. They are removed on cancellation or successful submission. Final answers live only in `event_answers`, with their own expiration timestamp; neither profile tables nor analytics events receive their contents. The final answer, questionnaire removal, and event enrollment commit in one database transaction. Repeated QR scans or old inline buttons cannot create duplicate participation or overwrite answers. Questions become immutable after the first submitted questionnaire, even after its answers expire, to preserve their meaning. Event details and registration status remain editable in the Mini App.
+
+Expired answers disappear from API results immediately. A cleanup job physically deletes expired answers and drafts at bot startup and every **10 minutes**, including when the Mini App is disabled. Database backups have their own lifecycle; align backup retention with your chosen answer retention policy if you make backups.
+
+### Enable the Mini App
+
+The bot and the Mini App API run in the **same Python process** and share the same SQLite/PostgreSQL database and Alembic migrations. The interface uses React, TypeScript, and [TelegramUI](https://github.com/telegram-mini-apps-dev/TelegramUI), with the official [Telegram Web App SDK](https://core.telegram.org/bots/webapps#initializing-mini-apps) for client integration. TelegramUI is a community UI kit, rather than a Telegram-owned SDK. Its `AppRoot`, lists, cells, tabs, form controls, buttons, and notifications follow Telegram's interface and current theme. Questionnaires remain in the bot chat.
+
+Docker builds the frontend automatically using `npm ci` and the committed lockfile, then copies the static output into the Python image. **Node.js is only needed for building, not running the bot.** For a Python installation, install Node.js 22.12+ (Node.js 24 LTS recommended) and build once from the project root:
+
+```bash
+npm ci --prefix frontend
+npm run build --prefix frontend
+```
+
+Repeat the build after editing `frontend/src/`. The generated `frontend/dist/` is ignored by Git and served by `aiohttp` on the same origin as `/api`. No frontend environment variables or credentials are required; the bot token and Outlook credentials stay in the server's `.env`. Telegram authorization is still validated on the server, and access requires completed registration and at least one created event.
+
+See [Mini App interface references](docs/miniapp-design.md) for the public product examples, layout decisions, and theme regression checks used by the organizer panel.
+
+Normal Telegram bots require an **HTTPS** URL, which can be local for development if the Telegram client can reach it and trusts its certificate. A public HTTPS endpoint is the usual deployment option for other users; a public domain is not required for every local test. Telegram's separate test environment also permits HTTP. Leave `MINI_APP_URL` empty to disable the web server and its launch buttons while retaining the bot and chat questionnaires. There is no authentication bypass for local browsers.
+
+### Local HTTPS with the existing bot
+
+The approach in [synphora's local development script](https://github.com/samanwirst/synphora/blob/main/client/synphora_app/package.json) is to serve HTTPS with a local certificate. Its aiogram bot uses the regular Telegram API. This project supports the same setup directly in `aiohttp`, without Next.js or another web server.
+
+Install [mkcert using its platform instructions](https://github.com/FiloSottile/mkcert#installation). The commands below install a development CA into your machine's trust stores and issue a certificate for loopback addresses. Run these steps yourself when you want to enable local HTTPS; the bot does not change system certificate trust.
+
+```bash
+mkdir -p .local/certificates
+mkcert -install
+mkcert -cert-file .local/certificates/localhost.pem \
+  -key-file .local/certificates/localhost-key.pem localhost 127.0.0.1 ::1
+chmod 600 .local/certificates/localhost-key.pem
+```
+
+For Python running with the project's root `.env`, add:
+
+```dotenv
+TELEGRAM_TEST_ENVIRONMENT=false
+MINI_APP_URL=https://127.0.0.1:8443
+MINI_APP_HOST=127.0.0.1
+MINI_APP_PORT=8443
+MINI_APP_TLS_CERT_FILE=.local/certificates/localhost.pem
+MINI_APP_TLS_KEY_FILE=.local/certificates/localhost-key.pem
+```
+
+Certificate paths are relative to the selected `.env` file, not the current working directory. Set both paths to enable direct TLS; leave both empty when TLS is handled by a reverse proxy. Direct TLS requires a matching, unencrypted private key and an HTTPS URL. The bot never prompts for a key password.
+
+Start normally with `python main.py`, open `https://127.0.0.1:8443/health` to verify HTTPS, and use Telegram Desktop **on the same computer**: register, create an event with `/new_event`, and open `/panel`. The certificate must be trusted by Telegram's embedded webview too; if the client reports a certificate error, fix that client's trust or use Telegram's official HTTP test environment below. Opening the URL in a plain browser alone does not supply signed Telegram authentication.
+
+For Docker, put the settings in `.local/.env` with paths `certificates/localhost.pem` and `certificates/localhost-key.pem`, since `.local/` is mounted at `/config/`. Run the local override, which publishes only a loopback port and does not start Caddy:
+
+```bash
+docker compose --env-file .local/.env \
+  -f compose.yaml -f compose.miniapp.local.yaml up -d --build
+```
+
+Keep `MINI_APP_PORT=8443` for the host port. The override sets the container's listening port to 8080 and forwards 8443 to it. Private certificate files stay outside the image under `.local/`. A phone's `127.0.0.1` points to the phone, so it cannot reach a server on your PC that way. For another device, use a reachable LAN address with the right certificate/client trust, or public HTTPS.
+
+### Official Telegram test environment over HTTP
+
+[Telegram documents a separate test environment](https://core.telegram.org/bots/webapps#using-bots-in-the-test-environment) that accepts HTTP Mini App URLs. In Telegram Desktop, open **Settings**, then **Shift + Alt + right-click Add Account** and select **Test Server**. Create a test account and a new bot through that environment's BotFather. Its token is separate from your existing bot token.
+
+Use a separate private `.env` file with the usual Graph configuration and these settings:
+
+```dotenv
+APP_ENV=local
+TELEGRAM_BOT_TOKEN=your_test_environment_bot_token
+TELEGRAM_TEST_ENVIRONMENT=true
+MINI_APP_URL=http://127.0.0.1:8080
+MINI_APP_HOST=127.0.0.1
+MINI_APP_PORT=8080
+MINI_APP_TLS_CERT_FILE=
+MINI_APP_TLS_KEY_FILE=
+```
+
+Start with `python main.py --env-file /path/to/test/.env`. The flag selects aiogram's built-in `TEST` API server and its `/test/` routes. It does not run a local Bot API server and does not turn a production bot token into a test token. The default SQLite database is `registrations.telegram-test.sqlite3` beside the selected `.env`, keeping test Telegram identities separate from normal identities. If you explicitly set `DATABASE_URL`, choose a separate test database yourself. `APP_ENV=production` rejects this flag; ordinary bots continue to reject HTTP Mini App URLs.
+
+This mode keeps Telegram signature validation, completed student registration, and the `/new_event` organizer requirement. For Docker, use `compose.miniapp.local.yaml` as above with the test settings. Your normal Telegram app/account environment cannot communicate with a test bot; switch the client to the test environment first. Test environment registration uses the existing Outlook verification workflow.
+
+### Public HTTPS deployment
+
+Once you have a domain, point its DNS to your server, allow incoming ports 80/443, and set these values in the bot's `.env` (`.local/.env` for Docker):
+
+```dotenv
+MINI_APP_URL=https://events.example.com
+MINI_APP_HOST=127.0.0.1
+MINI_APP_PORT=8080
+```
+
+Use an HTTPS origin without a path, query string, or credentials. Local Python binds to loopback by default. The optional Mini App Compose override sets the container bind address to `0.0.0.0` and publishes HTTP **only on the host's loopback interface**. The base bot stack publishes no ports. An optional Caddy configuration is included to obtain and renew TLS certificates automatically:
+
+```bash
+docker compose --env-file .local/.env \
+  -f compose.yaml -f compose.production.yaml -f compose.miniapp.yaml \
+  up -d --build
+```
+
+For SQLite instead of PostgreSQL, omit `-f compose.production.yaml`. If ports 80/443 already belong to another reverse proxy, copy only the `bot` environment and loopback port mapping from `compose.miniapp.yaml` into your own override and forward HTTPS to that port. `deploy/Caddyfile` forwards requests to `bot:8080`; certificate data persists in Docker volumes. The frontend and `/api` must use the same origin. The local health endpoint is `http://127.0.0.1:8080/health` while the Mini App server is enabled.
+
+Restart the bot, create your first event with `/new_event Event name`, and use `/start` or `/panel` to receive a Web App button. Existing event creators already qualify. A separate Telegram Main Mini App or menu-button configuration in BotFather is optional; the included private-chat inline Web App buttons are sufficient.
+
+Every API request sends raw `Telegram.WebApp.initData` in the `Authorization` header. The server validates its Telegram HMAC using aiogram, rejects duplicate fields, expired/future authentication data, and bot identities, and checks completed student registration and event ownership. Authentication expires after one hour; reopen the panel to refresh it. Telegram IDs from query parameters or unverified browser data are never used for access. Responses disable caching, values render as literal text, and request bodies/authentication headers are not logged. Each event has a revision to prevent one editor window from silently overwriting another.
 
 ### Everyday commands
 
@@ -147,14 +284,19 @@ Back up `.local/.env` along with the database. `BOT_VERIFICATION_SECRET` is gene
 
 | Table | Stored data |
 | --- | --- |
-| `telegram_users` | Telegram ID, first and last name, current username, language, Premium flag, first/last seen and profile update timestamps, Outlook profile link, email verification time (`verified_at`), shared phone number (`phone_number`), contact sharing time (`phone_shared_at`), and completed registration time (`registered_at`). |
+| `telegram_users` | Telegram ID, first and last name, current username, language, Premium flag, first/last seen and profile update timestamps, Outlook profile link, email verification time (`verified_at`), shared phone number (`phone_number`), contact sharing time (`phone_shared_at`), selected current education level (`education_level`), selection time (`education_selected_at`), and completed registration time (`registered_at`). |
 | `outlook_profiles` | Student ID, Microsoft Graph ID, UPN, display/given/family names, email addresses, first seen and last refresh timestamps. |
 | `verification_challenges` | Pending profile association, HMAC code hash and nonce, expiry, remaining attempts, and email submission status. Consumed codes are deleted. |
-| `registration_events` | Timestamped registration requests, email outcomes, verification successes/failures, registration completion after contact sharing, cancellations, bot starts, and lookup outcomes. Event details contain reasons and counters where useful. |
+| `registration_events` | Timestamped registration requests, email outcomes, verification successes/failures, contact sharing, education selection, registration completion, cancellations, bot starts, and lookup outcomes. Event details contain reasons, counters, and the selected education level where useful. |
+| `events` | Event UUID, name, description, creator's Telegram ID, creation time, registration status, question definitions, answer retention days, editor revision, and whether submitted questions are locked. |
+| `event_registrations` | Event UUID, participant's Telegram ID and Outlook profile link, and enrollment time. Unique constraints allow one participation per event and student profile or Telegram account. |
+| `pending_event_registrations` | Telegram user, event UUID, and first invitation time while account registration or event questions are incomplete. Rows are removed after enrollment or cancellation. |
+| `event_form_sessions` | One unfinished chat questionnaire per Telegram user: event, form revision, current question, button nonce, partial answers, and one-hour inactivity expiration. |
+| `event_answers` | Event enrollment link, submitted additional answers, submission time, and expiration time. Default retention is 30 days. |
 
-Telegram profiles are refreshed from incoming updates. Outlook profiles are refreshed from Graph; successful email verification links the two identities, and sharing the user's own contact completes registration. The phone number is normalized with a leading `+`; contact names and vCards are not duplicated in the database. Phone numbers are never included in analytics event details. These tables support registration funnels, active-user counts, language/Premium breakdowns, cohort analysis, and delivery/failure metrics. Timestamps are stored in UTC and relevant identity/time fields are indexed.
+Telegram profiles are refreshed from incoming updates. Outlook profiles are refreshed from Graph; successful email verification links the two identities, and education selection after contact sharing completes registration. Education levels are self-reported through the inline buttons. The phone number is normalized with a leading `+`; contact names and vCards are not duplicated in the database. Phone numbers are never included in analytics event details. These tables support registration funnels, active-user counts, education/language/Premium breakdowns, cohort analysis, and delivery/failure metrics. Timestamps are stored in UTC and relevant identity/time fields are indexed.
 
-The Outlook fields above are available through the existing basic-profile permissions. Missing source fields stay null. Bot-only capability flags, entire Telegram updates, chat contents, access tokens, and plaintext verification codes are not stored in the database. Codes are hashed with a separate secret in `.env`, and SQLite files have permissions `600`.
+The Outlook fields above are available through the existing basic-profile permissions. Missing source fields stay null. Bot-only capability flags, entire Telegram updates, general chat history, access tokens, and plaintext verification codes are not stored in the database. Explicit questionnaire answers are the temporary exception described above. Codes are hashed with a separate secret in `.env`, and SQLite files have permissions `600`.
 
 For example, registration totals by language use ordinary SQL on both backends:
 
@@ -186,7 +328,7 @@ alembic -x env_file=.env revision --autogenerate -m 'Describe the schema change'
 
 Compose mounts `.local/` at `/config/` with write access. The rest of the container filesystem is read-only. MSAL cache persistence replaces `.env` atomically, so mounting just the file would prevent reliable updates. The source `.env` is read by Python directly, rather than injected as container environment variables, so a stale environment value cannot override a refreshed token cache.
 
-The image runs as an unprivileged user. `.dockerignore` excludes credentials, local runtime data, Git metadata, and virtual environments. The runtime image contains only application code and production dependencies. The bot uses long polling and publishes no ports.
+The image runs as an unprivileged user. `.dockerignore` excludes credentials, local runtime data, Git metadata, and virtual environments. The runtime image contains only application code and production dependencies. The base bot stack uses long polling and publishes no ports. The optional Mini App override maps HTTP to host loopback and exposes public HTTPS through Caddy.
 
 Docker references: [bind mounts](https://docs.docker.com/engine/storage/bind-mounts/), [Compose services](https://docs.docker.com/reference/compose-file/services/).
 
@@ -200,6 +342,8 @@ Docker references: [bind mounts](https://docs.docker.com/engine/storage/bind-mou
 | Outlook sign-in required or token cache corrupted | Stop the bot, run the console login command again, then start it. |
 | A Telegram webhook is configured | Disable the existing webhook before using long polling. The bot leaves existing webhook settings intact. |
 | Telegram polling conflict | Stop the other instance using the same bot token. |
+| Mini App port is already in use | Stop the existing bot or web server before launching another instance. If using a user service, manage it with `systemctl --user restart wiut-social-registrar` and stop it before running `python main.py` manually. Changing the port also requires updating `MINI_APP_URL`. |
+| Mini App frontend is not built | Run `npm ci --prefix frontend` followed by `npm run build --prefix frontend`, or rebuild the Docker image. |
 | Microsoft Graph returns HTTP 403 | Check the signed-in account, delegated consent, and tenant policies. |
 | Student not found | Check the full ID, including leading zeroes, and `GRAPH_STUDENT_DOMAIN`. |
 | Code expired or attempts exhausted | Use `/resend` after the cooldown; enter the new code from Outlook. |
@@ -209,6 +353,7 @@ Docker references: [bind mounts](https://docs.docker.com/engine/storage/bind-mou
 ## Run without Docker
 
 Requires Python 3.11+. Python 3.12 is used in the Docker image.
+For the Mini App, also install Node.js 22.12+ and build the interface as shown under [Enable the Mini App](#enable-the-mini-app).
 
 ```bash
 python3 -m venv .venv
@@ -279,8 +424,16 @@ app/bot.py                           # Bot, dispatcher, middleware, shutdown
 app/handlers/                        # Registration, verification, and plain ID lookup
 app/services/registrar_service.py    # Graph lookups and fixed verification mail template
 app/services/registration_service.py # Registration workflow
+app/services/event_service.py        # Local PNG QR generation with Segno
 app/models.py                        # Shared SQLAlchemy models for SQLite and PostgreSQL
 app/repositories.py                  # Profiles, verification transactions, analytics events
+app/event_repository.py              # Events, idempotent enrollment, pending invitations
+app/event_forms.py                   # Question and answer validation
+app/surveys.py                       # Persistent chat questionnaire progress
+app/miniapp.py                       # Authenticated aiohttp API and answer expiration job
+frontend/src/                        # React/TypeScript organizer panel using TelegramUI
+frontend/package-lock.json           # Reproducible frontend dependency versions
+frontend/dist/                       # Generated static assets served by aiohttp (ignored)
 app/db.py                            # Async database lifecycle and migrations
 migrations/                          # Versioned Alembic schema migrations
 cli.py                               # Local console tools and sign-in
@@ -288,6 +441,9 @@ registrar/                           # Graph client, MSAL authentication, models
 Dockerfile                           # Runtime image and test target
 compose.yaml                         # Bot service and persistent configuration mount
 compose.production.yaml              # PostgreSQL production override
+compose.miniapp.yaml                 # Optional public HTTPS reverse proxy
+compose.miniapp.local.yaml           # Loopback-only Mini App development, HTTP or direct TLS
+deploy/Caddyfile                     # Automatic TLS and Mini App proxy configuration
 tests/                               # Tests with mocked Telegram and HTTP transports
 ```
 
@@ -305,11 +461,23 @@ Or use a local virtual environment:
 
 ```bash
 python -m pip install -r requirements-dev.txt
+npm ci --prefix frontend
+npm run build --prefix frontend
 python -m pytest -q
 ```
 
-Tests cover registration, own-contact checks, phone-step persistence, migration of existing email-verified users, profile persistence, code expiry, wrong attempts, replay prevention, resends, concurrent requests, rate limits, Telegram routing, and the Graph/console core. Telegram and Graph transports are mocked; tests send no real messages or emails.
+Tests cover registration, own-contact checks, phone-step persistence, event QR links, duplicate enrollment, pending invitations, atomic student/event registration, participant API authorization and pagination, retired chat-menu handling, chat questionnaires and inline MCQ choices, partial answer expiry, retention changes, answer deletion, stale buttons, concurrent submissions, signed Mini App authentication, ownership checks on every API endpoint, schema migrations, profile persistence, code expiry, wrong attempts, replay prevention, resends, rate limits, Telegram routing, and the Graph/console core. Telegram and Graph transports are mocked; tests send no real messages or emails.
 
-Set `TEST_DATABASE_URL` to an async PostgreSQL URL for a dedicated database whose name ends in `_test` to run repository tests against PostgreSQL as well. These tests truncate the four application tables in that database between cases. SQLite tests run without an external service.
+Optional browser integration checks use a temporary database, synthetic students, the real API, and a simulated Telegram host. After building the frontend, run:
+
+```bash
+python -m pip install playwright
+python -m playwright install chromium
+python tests/browser_miniapp.py
+```
+
+The script also detects a system Chromium installation. Set `CHROMIUM_EXECUTABLE` to choose a browser explicitly. It checks saved questions, locked forms, participant pagination, themes, mobile layouts, and unsaved changes; screenshots contain only synthetic data and are saved to a temporary directory.
+
+Set `TEST_DATABASE_URL` to an async PostgreSQL URL for a dedicated database whose name ends in `_test` to run repository and API tests against PostgreSQL as well. These tests truncate application tables in that database between cases. SQLite tests run without an external service.
 
 The project is licensed under [GNU GPL v3](LICENSE).

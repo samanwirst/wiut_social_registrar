@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardRemove
 
 from app.handlers.contact_handler import phone_prompt
+from app.handlers.education_handler import education_prompt
 from app.repositories import RegistrationError
 from registrar.errors import GraphError
 
@@ -37,6 +38,9 @@ async def cmd_resend(message: Message, registration_service, registration_reposi
     if verified_student:
         await message.answer("Your account is already registered. Use /start to see your profile.")
         return
+    if await registration_repository.awaiting_education(message.from_user.id):
+        await education_prompt(message)
+        return
     if await registration_repository.awaiting_phone(message.from_user.id):
         await phone_prompt(message)
         return
@@ -52,11 +56,18 @@ async def cmd_resend(message: Message, registration_service, registration_reposi
     await code_prompt(message, status)
 
 
-async def cmd_cancel(message: Message, registration_repository, verified_student):
+async def cmd_cancel(message: Message, registration_repository, verified_student, event_survey):
+    if await event_survey.cancel(message.from_user.id):
+        await message.answer("Event questionnaire cancelled. Open the event link again to restart it.")
+        return
     if verified_student:
         await message.answer("Your account is already registered. Use /start to see your profile.")
         return
-    await registration_repository.cancel(message.from_user.id)
+    try:
+        await registration_repository.cancel(message.from_user.id)
+    except RegistrationError as error:
+        await message.answer(str(error))
+        return
     await message.answer("Registration cancelled. Send your student ID to start again.",
                          reply_markup=ReplyKeyboardRemove())
 

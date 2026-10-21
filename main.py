@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 async def run(settings: BotSettings, *, check: bool = False) -> None:
     app = BotApp(settings)
     try:
+        logger.info("Using Telegram %s environment.", "TEST" if settings.telegram_test_environment else "production")
         me = await app.check_connection()
         logger.info("Telegram @%s, Outlook, and the database are ready.", me.username)
         if not check:

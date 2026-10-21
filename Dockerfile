@@ -1,3 +1,10 @@
+FROM node:24-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --ignore-scripts --no-fund
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,6 +26,7 @@ COPY app/ ./app/
 COPY registrar/ ./registrar/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
+COPY --from=frontend /frontend/dist/ ./frontend/dist/
 
 USER app
 
@@ -32,4 +40,5 @@ RUN python -m pytest -q -p no:cacheprovider
 
 FROM base AS runtime
 COPY README.md LICENSE ./
+EXPOSE 8080
 CMD ["python", "main.py", "--env-file", "/config/.env"]

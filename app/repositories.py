@@ -10,7 +10,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.db import Database
-from app.models import OutlookProfile, RegistrationEvent, TelegramUser, VerificationChallenge
+from app.education import EDUCATION_LEVELS
+from app.event_repository import enroll_pending_events
+from app.models import OutlookProfile, PendingEventRegistration, RegistrationEvent, TelegramUser, VerificationChallenge
 from registrar.models import Student
 
 
@@ -66,14 +68,22 @@ class RegistrationRepository:
             profile = await session.scalar(select(OutlookProfile).join(
                 TelegramUser, TelegramUser.outlook_profile_id == OutlookProfile.id).where(
                     TelegramUser.id == user_id, TelegramUser.verified_at.is_not(None),
-                    TelegramUser.registered_at.is_not(None), TelegramUser.phone_number.is_not(None)))
+                    TelegramUser.registered_at.is_not(None), TelegramUser.phone_number.is_not(None),
+                    TelegramUser.education_level.in_(EDUCATION_LEVELS.values())))
             return profile.student() if profile else None
 
     async def awaiting_phone(self, user_id) -> bool:
         async with self.db.transaction() as session:
             return bool(await session.scalar(select(TelegramUser.id).where(
                 TelegramUser.id == user_id, TelegramUser.verified_at.is_not(None),
-                TelegramUser.outlook_profile_id.is_not(None), TelegramUser.registered_at.is_(None))))
+                TelegramUser.outlook_profile_id.is_not(None), TelegramUser.phone_number.is_(None))))
+
+    async def awaiting_education(self, user_id) -> bool:
+        async with self.db.transaction() as session:
+            return bool(await session.scalar(select(TelegramUser.id).where(
+                TelegramUser.id == user_id, TelegramUser.verified_at.is_not(None),
+                TelegramUser.outlook_profile_id.is_not(None), TelegramUser.phone_number.is_not(None),
+                TelegramUser.education_level.is_(None))))
 
     async def pending(self, user_id) -> Student | None:
         async with self.db.transaction() as session:
@@ -95,7 +105,7 @@ class RegistrationRepository:
             if user.registered_at is not None:
                 raise RegistrationError("Your account is already registered. Use /start to see your profile.")
             if user.verified_at is not None:
-                raise RegistrationError("Your email is already verified. Use /start and share your phone number to finish registration.")
+                raise RegistrationError("Your email is already verified. Use /start to continue registration.")
             if self.db.engine.dialect.name == "postgresql":
                 # Serialize requests for the same mailbox, including directory aliases.
                 key = int.from_bytes(hashlib.sha256(student.email.casefold().encode()).digest()[:8], signed=True)
@@ -165,7 +175,7 @@ class RegistrationRepository:
             raise RegistrationError(error)
         return student
 
-    async def complete_registration(self, user_id, contact_user_id, phone_number: str) -> Student:
+    async def save_contact(self, user_id, contact_user_id, phone_number: str) -> None:
         if contact_user_id != user_id:
             raise RegistrationError("Share your own Telegram contact using the button below.")
         phone_number = phone_number.strip()
@@ -176,13 +186,30 @@ class RegistrationRepository:
             user = await session.scalar(select(TelegramUser).where(TelegramUser.id == user_id).with_for_update())
             if user is None or user.verified_at is None or user.outlook_profile_id is None:
                 raise RegistrationError("Verify your Outlook email first. Send /start to begin registration.")
-            profile = await session.get(OutlookProfile, user.outlook_profile_id)
-            if user.registered_at is None:
+            if user.phone_number is None:
                 now = self.clock()
                 user.phone_number = phone_number
                 user.phone_shared_at = now
+                self._event(session, user_id, "phone_shared", user.outlook_profile_id)
+
+    async def complete_registration(self, user_id, education_level: str) -> Student:
+        if education_level not in EDUCATION_LEVELS.values():
+            raise RegistrationError("Choose CIFS, Level 4, Level 5, or Level 6 using the buttons.")
+        async with self.db.transaction(write=True) as session:
+            user = await session.scalar(select(TelegramUser).where(TelegramUser.id == user_id).with_for_update())
+            if user is None or user.verified_at is None or user.outlook_profile_id is None or user.phone_number is None:
+                raise RegistrationError("Confirm your email and share your own phone number first. Use /start to continue.")
+            if user.education_level is not None:
+                raise RegistrationError("Your account is already registered. Use /start to see your profile.")
+            profile = await session.get(OutlookProfile, user.outlook_profile_id)
+            now = self.clock()
+            user.education_level = education_level
+            user.education_selected_at = now
+            self._event(session, user_id, "education_level_selected", profile.id, education_level=education_level)
+            if user.registered_at is None:
                 user.registered_at = now
                 self._event(session, user_id, "registration_completed", profile.id)
+            await enroll_pending_events(session, self.insert, user, now)
             return profile.student()
 
     async def cancel(self, user_id):
@@ -193,7 +220,12 @@ class RegistrationRepository:
                     raise RegistrationError("Your account is already registered. Use /start to see your profile.")
                 user.verified_at = None
                 user.outlook_profile_id = None
+                user.phone_number = None
+                user.phone_shared_at = None
+                user.education_level = None
+                user.education_selected_at = None
             await session.execute(delete(VerificationChallenge).where(VerificationChallenge.telegram_user_id == user_id))
+            await session.execute(delete(PendingEventRegistration).where(PendingEventRegistration.telegram_user_id == user_id))
             self._event(session, user_id, "registration_cancelled")
 
     async def event(self, user_id, name, student=None, **details):

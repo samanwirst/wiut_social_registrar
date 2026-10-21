@@ -103,6 +103,60 @@ def test_production_builds_postgres_url_without_losing_special_password_characte
     assert "private" not in repr(settings)
 
 
+@pytest.mark.parametrize("extra", ["MINI_APP_URL=http://example.test", "MINI_APP_URL=https://example.test/path",
+    "MINI_APP_URL=https://user:password@example.test", "MINI_APP_URL=https://example.test?token=secret",
+    "MINI_APP_URL=https://[invalid", "MINI_APP_URL=https://example.test:invalid", "MINI_APP_PORT=0", "MINI_APP_PORT=70000"])
+def test_invalid_mini_app_configuration_is_rejected(tmp_path, extra):
+    path = tmp_path / ".env"
+    path.write_text("TELEGRAM_BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789\n" + extra)
+    with pytest.raises(ConfigurationError):
+        BotSettings.load(path)
+
+
+def test_mini_app_configuration_uses_https_origin_and_local_bind_by_default(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("TELEGRAM_BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789\nMINI_APP_URL=https://events.example.test/\n")
+    settings = BotSettings.load(path)
+    assert settings.mini_app_url == "https://events.example.test"
+    assert settings.mini_app_host == "127.0.0.1" and settings.mini_app_port == 8080
+
+
+def test_official_test_environment_allows_http_and_uses_a_separate_default_database(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("TELEGRAM_BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789\n"
+                    "TELEGRAM_TEST_ENVIRONMENT=true\nMINI_APP_URL=http://127.0.0.1:8080\n")
+    settings = BotSettings.load(path)
+    assert settings.telegram_test_environment
+    assert settings.mini_app_url == "http://127.0.0.1:8080"
+    assert settings.database_url.endswith("registrations.telegram-test.sqlite3")
+
+
+@pytest.mark.parametrize("extra", ["TELEGRAM_TEST_ENVIRONMENT=invalid",
+    "TELEGRAM_TEST_ENVIRONMENT=true\nAPP_ENV=production\nPOSTGRES_PASSWORD=test-password",
+    "MINI_APP_URL=https://127.0.0.1:8443\nMINI_APP_TLS_CERT_FILE=cert.pem",
+    "MINI_APP_TLS_KEY_FILE=key.pem",
+    "MINI_APP_TLS_CERT_FILE=cert.pem\nMINI_APP_TLS_KEY_FILE=key.pem",
+    "TELEGRAM_TEST_ENVIRONMENT=true\nMINI_APP_URL=http://127.0.0.1:8080\nMINI_APP_TLS_CERT_FILE=cert.pem\nMINI_APP_TLS_KEY_FILE=key.pem"])
+def test_unsafe_or_incomplete_test_and_tls_configuration_is_rejected(tmp_path, extra):
+    path = tmp_path / ".env"
+    path.write_text("TELEGRAM_BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789\n" + extra)
+    with pytest.raises(ConfigurationError):
+        BotSettings.load(path)
+
+
+def test_local_tls_paths_are_resolved_from_env_file_location(tmp_path):
+    directory = tmp_path / "private"
+    directory.mkdir()
+    path = directory / ".env"
+    path.write_text("TELEGRAM_BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789\n"
+                    "MINI_APP_URL=https://127.0.0.1:8443\nMINI_APP_PORT=8443\n"
+                    "MINI_APP_TLS_CERT_FILE=certificates/localhost.pem\nMINI_APP_TLS_KEY_FILE=certificates/localhost-key.pem\n")
+    settings = BotSettings.load(path)
+    assert settings.mini_app_tls_cert_file == directory / "certificates" / "localhost.pem"
+    assert settings.mini_app_tls_key_file == directory / "certificates" / "localhost-key.pem"
+    assert not settings.telegram_test_environment
+
+
 @pytest.mark.asyncio
 async def test_verification_email_uses_fixed_template_in_graph_worker(monkeypatch, tmp_path):
     client = Mock()
