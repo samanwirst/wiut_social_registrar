@@ -42,6 +42,23 @@ global Docker cleanup, other project directory, or shared reverse-proxy restart 
 Infrastructure updates require explicitly reinstalling the reviewed infrastructure
 files. The pipeline updates only the runtime image.
 
+### Optional Telegram routing override
+
+Use normal DNS whenever the server can reach its selected `api.telegram.org` address.
+If the server's network cannot reach that address, `compose.telegram-ip.yaml` can
+map the official hostname to another reachable Telegram API IPv4 address. Verify
+the endpoint with normal TLS hostname validation and the expected bot identity first.
+Set `REGISTRAR_TELEGRAM_API_IPV4` in the server's private environment and install
+this optional overlay beside the other Compose files. The deployment command includes
+it only when that file is present. This uses Docker's documented
+[`extra_hosts`](https://docs.docker.com/reference/compose-file/services/#extra_hosts)
+setting for the bot container only; it does not change host DNS, disable TLS checks,
+introduce a proxy, or affect other containers.
+
+The address is deployment configuration, not an application constant. Recheck it
+if Telegram connectivity changes. To return to normal DNS, remove the optional
+overlay from the server and redeploy the bot.
+
 ## Trusted HTTPS on a public IP
 
 The release overlay serves the Mini App on `https://PUBLIC_IP`. Caddy obtains

@@ -51,6 +51,9 @@ def run(args, *, env, input=None, timeout=300):
 
 
 def compose_command(*args):
+    files = ["compose.yaml", "compose.production.yaml", "compose.release.yaml"]
+    if (ROOT / "compose.telegram-ip.yaml").is_file():
+        files.append("compose.telegram-ip.yaml")
     return [
         "docker",
         "compose",
@@ -60,12 +63,7 @@ def compose_command(*args):
         str(ROOT),
         "--env-file",
         str(ROOT / ".local/.env"),
-        "-f",
-        str(ROOT / "compose.yaml"),
-        "-f",
-        str(ROOT / "compose.production.yaml"),
-        "-f",
-        str(ROOT / "compose.release.yaml"),
+        *(argument for name in files for argument in ("-f", str(ROOT / name))),
         *args,
     ]
 
