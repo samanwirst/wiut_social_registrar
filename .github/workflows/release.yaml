@@ -1,0 +1,139 @@
+name: CI and production
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registrar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: registrar
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: registrar_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U registrar -d registrar_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://registrar:postgres@127.0.0.1:5432/registrar_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm ci --ignore-scripts --no-fund --prefix frontend
+      - run: make check
+
+  image:
+    name: Release image
+    needs: checks
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify container packaging
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: test
+          push: false
+          cache-from: type=gha,scope=registrar
+          cache-to: type=gha,mode=max,scope=registrar
+      - id: build
+        name: Publish immutable runtime image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=registrar
+
+  deploy:
+    name: Deploy production
+    needs: image
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: registrar-production
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over a pinned SSH connection
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          RELEASE_IMAGE: ${{ needs.image.outputs.image }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$RUNNER_TEMP/registrar-ssh"
+          trap 'rm -rf "$RUNNER_TEMP/registrar-ssh"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/registrar-ssh/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/registrar-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/registrar-ssh/"*
+          python - <<'PY' | ssh -T -i "$RUNNER_TEMP/registrar-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/registrar-ssh/known_hosts" -o ConnectTimeout=15 "$DEPLOY_USER@$DEPLOY_HOST"
+          import json, os
+          print(json.dumps({
+              'image': os.environ['RELEASE_IMAGE'],
+              'commit': os.environ['RELEASE_COMMIT'],
+              'registry_user': os.environ['REGISTRY_USER'],
+              'registry_token': os.environ['REGISTRY_TOKEN'],
+          }))
+          PY
+      - name: Verify public HTTPS
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: curl --fail --silent --show-error --retry 4 --retry-delay 5 "$PRODUCTION_URL/health"

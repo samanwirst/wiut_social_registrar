@@ -1,0 +1,31 @@
+name: wiut-social-registrar
+
+services:
+  bot:
+    build:
+      context: .
+      target: runtime
+    image: wiut-social-registrar:local
+    init: true
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    volumes:
+      - type: bind
+        source: ./.local
+        target: /config
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

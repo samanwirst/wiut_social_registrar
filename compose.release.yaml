@@ -1,0 +1,53 @@
+# Release overlay: prebuilt image, isolated production state, and public IP HTTPS.
+# Use with compose.yaml and compose.production.yaml, with an explicit project name.
+services:
+  bot:
+    image: ${REGISTRAR_IMAGE:?Set the immutable release image}
+    environment:
+      MINI_APP_HOST: 0.0.0.0
+      MINI_APP_PORT: "8080"
+    ports:
+      - "127.0.0.1:${REGISTRAR_HEALTH_PORT:-18080}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).close()"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 60s
+
+  caddy:
+    image: caddy:2.11.7-alpine
+    init: true
+    restart: unless-stopped
+    environment:
+      REGISTRAR_PUBLIC_IP: ${REGISTRAR_PUBLIC_IP:?Set the public server IP}
+      REGISTRAR_ACME_CA: ${REGISTRAR_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+    volumes:
+      - ./deploy/Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - registrar_tls_data:/data
+      - registrar_tls_config:/config
+    networks:
+      - default
+      - registrar_edge
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${REGISTRAR_EDGE_NETWORK:?Set the existing proxy network}
+      traefik.tcp.routers.registrar-ip-https.entrypoints: websecure
+      traefik.tcp.routers.registrar-ip-https.rule: HostSNI(`${REGISTRAR_ACME_SNI:?Set the IP reverse pointer}`) || HostSNI(`${REGISTRAR_PUBLIC_IP}`) || !HostSNIRegexp(`.+`)
+      traefik.tcp.routers.registrar-ip-https.tls.passthrough: "true"
+      traefik.tcp.routers.registrar-ip-https.service: registrar-ip-https
+      traefik.tcp.services.registrar-ip-https.loadbalancer.server.port: "443"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  registrar_edge:
+    external: true
+    name: ${REGISTRAR_EDGE_NETWORK:?Set the existing proxy network}
+
+volumes:
+  registrar_tls_data:
+  registrar_tls_config:

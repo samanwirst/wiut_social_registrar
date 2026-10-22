@@ -1,0 +1,4 @@
+{$MINI_APP_URL} {
+	reverse_proxy bot:8080
+	header Strict-Transport-Security "max-age=31536000"
+}
