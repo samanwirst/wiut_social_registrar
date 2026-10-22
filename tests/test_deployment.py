@@ -90,3 +90,14 @@ def test_existing_production_release_never_reimports_data(tmp_path, monkeypatch)
     (shared / "current.json").write_text("{}")
     monkeypatch.setattr(release, "ROOT", tmp_path)
     release.bootstrap_database({})
+
+
+def test_network_override_is_scoped_and_only_used_when_installed(tmp_path, monkeypatch):
+    monkeypatch.setattr(release, "ROOT", tmp_path)
+    normal = release.compose_command("up", "bot")
+    overlay = tmp_path / "compose.telegram-ip.yaml"
+    assert str(overlay) not in normal
+
+    overlay.write_text("services: {}")
+    overridden = release.compose_command("up", "bot")
+    assert overridden == [*normal[:-2], "-f", str(overlay), "up", "bot"]

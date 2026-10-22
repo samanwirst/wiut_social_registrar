@@ -1,0 +1,6 @@
+# Optional server-specific DNS override, installed only when the normal API route fails.
+# Keep the official hostname and normal TLS certificate validation.
+services:
+  bot:
+    extra_hosts:
+      - "api.telegram.org=${REGISTRAR_TELEGRAM_API_IPV4:?Set a verified Telegram API IPv4 address}"

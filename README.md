@@ -8,6 +8,8 @@ Local mode uses SQLite. Production mode requires PostgreSQL. Both use the same m
 
 Production releases from `main`, GitHub Actions deployment, IP-based HTTPS, private
 backups, and a separate development bot are documented in [deployment.md](docs/deployment.md).
+That guide also covers the optional `REGISTRAR_TELEGRAM_API_IPV4` setting for a
+container-specific Telegram routing override when the server cannot reach its DNS-selected address.
 
 ## Before you start
 
@@ -21,7 +23,7 @@ You need:
 Download and extract the project archive, or clone the repository:
 
 ```bash
-git clone --branch dev https://github.com/samanwirst/wiut_social_registrar.git
+git clone --branch main https://github.com/samanwirst/wiut_social_registrar.git
 cd wiut_social_registrar
 ```
 
