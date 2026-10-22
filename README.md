@@ -6,6 +6,9 @@ Registration is open to everyone in private chats. Verification emails use a fix
 
 Local mode uses SQLite. Production mode requires PostgreSQL. Both use the same models and Alembic migrations, applied automatically at startup.
 
+Production releases from `main`, GitHub Actions deployment, IP-based HTTPS, private
+backups, and a separate development bot are documented in [deployment.md](docs/deployment.md).
+
 ## Before you start
 
 You need:

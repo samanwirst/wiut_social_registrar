@@ -1,0 +1,9 @@
+[Unit]
+Description=WIUT Social Registrar private database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/wiut-social-registrar-deploy --backup
+UMask=0077

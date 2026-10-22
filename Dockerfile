@@ -26,6 +26,7 @@ COPY app/ ./app/
 COPY registrar/ ./registrar/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
+COPY scripts/transfer_database.py ./scripts/transfer_database.py
 COPY --from=frontend /frontend/dist/ ./frontend/dist/
 
 USER app
@@ -35,6 +36,7 @@ USER root
 COPY requirements-dev.txt ./
 RUN python -m pip install --no-cache-dir -r requirements-dev.txt
 COPY tests/ ./tests/
+COPY deploy/ ./deploy/
 COPY pyproject.toml ./
 USER app
 RUN python -m ruff check --no-cache . \
