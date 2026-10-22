@@ -74,6 +74,37 @@ def compose(*args, env, timeout=300):
     return run(compose_command(*args), env=env, timeout=timeout)
 
 
+def bootstrap_database(env):
+    shared = ROOT / "shared"
+    completed = shared / "initial-import.complete"
+    if completed.exists() or (shared / "current.json").exists():
+        return
+    snapshot = shared / "initial-snapshot.json"
+    if not snapshot.is_file():
+        raise RuntimeError("The private initial database snapshot is missing")
+    compose(
+        "run",
+        "--rm",
+        "--no-deps",
+        "-T",
+        "--pull",
+        "never",
+        "-v",
+        str(snapshot) + ":/migration/snapshot.json:ro",
+        "bot",
+        "python",
+        "-m",
+        "scripts.transfer_database",
+        "import",
+        "--env-file",
+        "/config/.env",
+        "--file",
+        "/migration/snapshot.json",
+        env=env,
+    )
+    completed.touch(mode=0o600)
+
+
 def backup_database(env):
     folder = ROOT / "shared/backups"
     folder.mkdir(mode=0o700, exist_ok=True)
@@ -148,6 +179,7 @@ def deploy(data):
             )
             compose("config", "--quiet", env=env)
             compose("pull", "bot", env=env, timeout=600)
+            bootstrap_database(env)
             backup_database(env)
             # Database files and TLS volumes belong to this project and are never recreated here.
             try:

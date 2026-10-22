@@ -1,6 +1,7 @@
 {
 	admin off
 	auto_https disable_redirects
+	default_sni {$REGISTRAR_PUBLIC_IP}
 }
 
 https://{$REGISTRAR_PUBLIC_IP}:443 {
@@ -8,7 +9,7 @@ https://{$REGISTRAR_PUBLIC_IP}:443 {
 		issuer acme {
 			dir {$REGISTRAR_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
 			profile shortlived
-            disable_http_challenge
+			disable_http_challenge
 		}
 	}
 	reverse_proxy bot:8080

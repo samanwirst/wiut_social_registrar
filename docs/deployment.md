@@ -82,7 +82,7 @@ Install `deploy/release.py` as `/usr/local/libexec/wiut-social-registrar-deploy`
 owned by root and mode `755`. The dedicated account's authorized-key entry uses
 `restrict,command="sudo -n /usr/local/libexec/wiut-social-registrar-deploy"`; its
 sudoers entry permits only that command. Create `shared/ready` only after PostgreSQL,
-TLS, the private environment, and the initial data import have been prepared.
+TLS, the private environment, and the private initial snapshot have been prepared.
 
 Install the project-prefixed backup service/timer and enable the timer after the
 first successful deployment. Check the first backup before relying on unattended runs.
@@ -97,9 +97,12 @@ registered users remain associated with the same account.
 python -m scripts.transfer_database export --env-file .env --file .local/production-snapshot.json
 ```
 
-Transfer this private snapshot over SSH. Import it with the new runtime image using
-the server's production configuration, mounting the snapshot read-only at a private
-container path:
+Transfer this private snapshot over SSH to `shared/initial-snapshot.json`, mode `600`,
+owned by the application UID. The first deployment imports it with the pulled runtime
+image in a one-off container, before starting polling or taking the first PostgreSQL
+backup. The snapshot is mounted read-only. A successful import creates
+`shared/initial-import.complete`; subsequent deployments never import again.
+The import command used inside that container is:
 
 ```bash
 python -m scripts.transfer_database import --env-file /config/.env --file /migration/snapshot.json
