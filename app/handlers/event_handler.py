@@ -8,6 +8,7 @@ from aiogram.types import (
 )
 from aiogram.utils.formatting import Bold, Text
 
+from app.chat_formatting import error_text
 from app.dialogs.registration import prompt_remaining_profile_fields
 from app.event_repository import EventError
 
@@ -24,14 +25,14 @@ async def new_event(
     if not verified_student:
         if not await prompt_remaining_profile_fields(message, registration_repository):
             await message.answer(
-                "Complete registration first. Send /start, then your own student ID."
+                "Complete registration first. Send /start, then your own student ID"
             )
         return
     title = command.args if command and command.args else "New Event"
     try:
         event = await event_repository.create(message.from_user.id, title)
     except EventError as error:
-        await message.answer(str(error))
+        await message.answer(error_text(error))
         return
     text = Text(
         Bold("Congratulations! Event created 🎉"),
@@ -53,7 +54,7 @@ async def new_event(
             ]
         )
     else:
-        text += Text("The event panel is currently unavailable. Your event has been saved.")
+        text += Text("The event panel is currently unavailable. Your event has been saved")
     await message.answer(
         **text.as_kwargs(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,

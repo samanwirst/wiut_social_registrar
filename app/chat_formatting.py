@@ -5,6 +5,10 @@ from aiogram.utils.formatting import Bold, Code, Text
 from registrar.models import Student
 
 
+def error_text(error: Exception) -> str:
+    return str(error).removesuffix(".")
+
+
 def card(title: str, body: str | Text) -> Text:
     return Text(Bold(title), "\n\n", body)
 

@@ -44,7 +44,9 @@ def test_command_visibility_matches_registration_and_organizer_permissions():
     assert "new_event" in student and "resend" not in student and "panel" not in student
     assert "panel" in organizer
     assert "me" not in visitor and "me" in student and "me" in organizer
+    assert student[-3:] == organizer[-3:] == ["me", "help", "info"]
     for commands in (visitor, student, organizer):
+        assert commands[-2:] == ["help", "info"]
         assert not {"find", "members", "send", "mail", "cancel"} & set(commands)
 
 

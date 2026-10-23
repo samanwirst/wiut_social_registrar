@@ -12,7 +12,7 @@ from aiogram.types import (
 )
 from aiogram.utils.formatting import Bold, Code, Text
 
-from app.chat_formatting import card
+from app.chat_formatting import card, error_text
 from app.education import EDUCATION_LEVELS
 from registrar.errors import GraphError
 
@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 async def phone_prompt(message: Message, text: str | None = None) -> None:
     await message.answer(
         **card(
-            "Step 3 of 4 · Phone number",
+            "Step 3 of 4",
             text
             or Text(
-                "Your email is verified.\n",
+                "Your email is verified\n",
                 "Tap ",
                 Bold("Share phone number"),
-                " below to share your own Telegram contact.\n\n",
-                "Your number will be saved with your student profile.",
+                " below to share your own Telegram contact\n\n",
+                "Your number will be saved with your student profile",
             ),
         ).as_kwargs(),
         reply_markup=ReplyKeyboardMarkup(
@@ -47,8 +47,8 @@ async def education_prompt(message: Message) -> None:
     ]
     await message.answer(
         **card(
-            "Step 4 of 4 · Education level",
-            "Select your current education level to finish registration.",
+            "Step 4 of 4",
+            "Select your current education level to finish registration",
         ).as_kwargs(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons[:2], buttons[2:]]),
     )
@@ -56,32 +56,29 @@ async def education_prompt(message: Message) -> None:
 
 async def code_prompt(message, status):
     text = (
-        "Open the Outlook mailbox linked to your student ID and enter the 6-digit code here.\n"
-        "The code expires in 10 minutes.\n\n"
+        "Open the Outlook mailbox linked to your student ID and enter the 6-digit code here\n"
+        "The code expires in 10 minutes\n\n"
         "/resend — request a new code"
     )
     if status == "unknown":
         text = (
-            "Microsoft did not confirm email submission.\n"
-            "If the email arrives in Outlook, enter its 6-digit code here.\n\n"
-            "Otherwise, wait 60 seconds and use /resend."
+            "Microsoft did not confirm email submission\n"
+            "If the email arrives in Outlook, enter its 6-digit code here\n\n"
+            "Otherwise, wait 60 seconds and use /resend"
         )
-    await message.answer(**card("Step 2 of 4 · Verify your email", text).as_kwargs())
+    await message.answer(**card("Step 2 of 4", text).as_kwargs())
 
 
 async def welcome(message: Message) -> None:
     content = Text(
         Bold("Welcome to Social Registrar"),
         "\n",
-        "Register once. Join WIUT events with a scan.\n\n",
-        Bold("Step 1 of 4 · Student ID"),
+        "Register once, join WIUT events with a scan\n\n",
+        Bold("Step 1 of 4"),
         "\n",
-        "Send your own student ID as text. Keep any leading zeroes.\n",
+        "Send your own student ID as text, including any leading zeroes\n",
         "For example: ",
         Code("00000001"),
-        "\n\n",
-        "Next, verify your Outlook email, share your phone number and choose your education level.\n\n",
-        "/help — how it works",
     )
     await message.answer(**content.as_kwargs(), reply_markup=ReplyKeyboardRemove())
 
@@ -90,11 +87,11 @@ async def request_code(message, service, student_id):
     try:
         status = await service.request_code(message.from_user.id, student_id)
     except ValueError as error:
-        await message.answer(str(error))
+        await message.answer(error_text(error))
         return
     except GraphError as error:
         logger.warning("Registration email unavailable (%s).", type(error).__name__)
-        await message.answer("Registration is temporarily unavailable. Please try again later.")
+        await message.answer("Registration is temporarily unavailable. Please try again later")
         return
     await code_prompt(message, status)
 

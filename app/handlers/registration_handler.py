@@ -1,7 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import Message
 
-from app.chat_formatting import card
+from app.chat_formatting import card, error_text
 from app.dialogs.registration import (
     phone_prompt,
     prompt_remaining_profile_fields,
@@ -21,14 +21,14 @@ async def registration_text(
     if verified_student and await event_survey.active(message.from_user.id):
         await receive_answer(message, event_survey)
     elif verified_student:
-        await message.answer("Use /me to view your own profile, or /help for instructions.")
+        await message.answer("Use /me to view your own profile, or /help for instructions")
     elif await prompt_remaining_profile_fields(message, registration_repository):
         return
     elif await registration_repository.pending(message.from_user.id):
         try:
             await registration_repository.consume_code(message.from_user.id, message.text.strip())
         except RegistrationError as error:
-            await message.answer(str(error))
+            await message.answer(error_text(error))
             return
         await phone_prompt(message)
     else:
@@ -47,9 +47,9 @@ async def unsupported_message(
             "That command is not available. Use the Menu button or /help for the command list\n\n"
             if message.text and message.text.startswith("/")
             else (
-                "Use /me to view your own profile, or /help for instructions."
+                "Use /me to view your own profile, or /help for instructions"
                 if verified_student
-                else "Send your own student ID to register, or use /help for instructions."
+                else "Send your own student ID to register, or use /help for instructions"
             )
         )
         await message.answer(**card("Need a hand?", text).as_kwargs())

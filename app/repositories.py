@@ -83,6 +83,11 @@ class RegistrationRepository:
             ).first()
             return row[1].student() if row is not None and registration_complete(row[0]) else None
 
+    async def education_level(self, user_id) -> str | None:
+        async with self.db.transaction() as session:
+            user = await session.get(TelegramUser, user_id)
+            return user.education_level if registration_complete(user) else None
+
     async def next_profile_field(self, user_id) -> str | None:
         async with self.db.transaction() as session:
             return missing_profile_field(await session.get(TelegramUser, user_id))

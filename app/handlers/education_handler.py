@@ -2,7 +2,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.utils.formatting import Text
 
-from app.chat_formatting import student_profile
+from app.chat_formatting import error_text, student_profile
 from app.dialogs.messages import update_keyboard
 from app.dialogs.surveys import resume_survey
 from app.education import EDUCATION_LEVELS
@@ -21,13 +21,13 @@ async def choose_education(
 ):
     level = EDUCATION_LEVELS.get((callback.data or "").removeprefix("education:"))
     if level is None:
-        await callback.answer("Choose CIFS, Level 4, Level 5, or Level 6.", show_alert=True)
+        await callback.answer("Choose CIFS, Level 4, Level 5, or Level 6", show_alert=True)
         return
     try:
         pending_titles = await event_repository.pending_titles(callback.from_user.id)
         student = await registration_repository.complete_registration(callback.from_user.id, level)
     except RegistrationError as error:
-        await callback.answer(str(error), show_alert=True)
+        await callback.answer(error_text(error), show_alert=True)
         return
     await callback.answer()
     await update_keyboard(callback.message, None)
@@ -36,9 +36,9 @@ async def choose_education(
         pending_forms = await event_repository.pending_forms(callback.from_user.id)
         text += Text(
             "\n\nSaved events without extra questions have been registered. "
-            "Complete the event questions below to finish the remaining registrations.\n"
+            "Complete the event questions below to finish the remaining registrations\n"
             if pending_forms
-            else "\n\nYour saved events have been registered.\n"
+            else "\n\nYour saved events have been registered\n"
         ) + Text("\n".join(pending_titles))
     await callback.message.answer(
         **text.as_kwargs(), reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel)

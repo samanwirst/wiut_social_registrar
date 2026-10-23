@@ -106,7 +106,7 @@ The education step also survives restarts. `/start` restores its inline buttons;
 
 Codes expire after 10 minutes and allow five incorrect attempts. `/resend` issues a new code and invalidates the old one. Requests have a 60-second cooldown and a limit of five per hour for a Telegram user or mailbox. Restarting the bot preserves pending codes, limits, and completed registrations.
 
-After registration, `/start` resumes any unfinished event questionnaire or sends a short welcome without a profile card or inline buttons. The welcome also removes reply keyboards left by older bot versions. `/me` shows only the completed profile linked to the Telegram sender, from the local database without an Outlook request. It takes no arguments and works only in private chats. Sending an ID or other text after registration does not search for students; text is accepted as an answer when an event questionnaire is active. Event organizers open the panel with `/panel`. `/help` explains the workflow.
+After registration, `/start` resumes any unfinished event questionnaire or sends a short welcome without a profile card or inline buttons. The welcome also removes reply keyboards left by older bot versions. `/me` shows only the completed profile linked to the Telegram sender, including their education level, from the local database without an Outlook request. It takes no arguments and works only in private chats. Sending an ID or other text after registration does not search for students; text is accepted as an answer when an event questionnaire is active. Event organizers open the panel with `/panel`. `/help` explains the workflow. `/info` presents the project with a cover image and the credit "Mukhammadiev Samandar, WestDevs", and links to the author, club and GitHub repository. It is available before registration too.
 
 ### Telegram profile and command menu
 
@@ -115,8 +115,9 @@ contact, and education level. Messages use ordinary Telegram entities for headin
 copyable IDs; student names and event text stay literal.
 
 The native **Menu** button adapts to the user. Before registration it offers `/start`,
-`/resend` and `/help`. Registered students see `/me` and `/new_event`; `/panel` appears
-only for event organizers when the panel is configured. Role changes update the menu
+`/resend`, `/help` and `/info`. Registered students see `/new_event`, `/me`, `/help` and
+`/info`; `/panel` appears after `/new_event` only for event organizers when the panel is
+configured. `/me` sits immediately before `/help`, and `/info` is last. Role changes update the menu
 immediately. Updates are cached with bounded memory, and a failed menu update does not
 block registration. Groups do not inherit the private-chat command list.
 
