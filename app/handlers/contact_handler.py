@@ -1,7 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import Message, ReplyKeyboardRemove
 
-from app.chat_formatting import card
+from app.chat_formatting import card, error_text
 from app.dialogs.registration import education_prompt, phone_prompt
 from app.keyboards import main_menu
 from app.repositories import RegistrationError
@@ -16,7 +16,7 @@ async def receive_contact(
 ) -> None:
     if verified_student:
         await message.answer(
-            "Your account is already registered. Use /me to view your own profile.",
+            "Your account is already registered. Use /me to view your own profile",
             reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel),
         )
         return
@@ -25,14 +25,14 @@ async def receive_contact(
         return
     if not await registration_repository.awaiting_phone(message.from_user.id):
         await message.answer(
-            "Verify your Outlook email first. Send your student ID to begin registration.",
+            "Verify your Outlook email first. Send your student ID to begin registration",
             reply_markup=ReplyKeyboardRemove(),
         )
         return
     if message.forward_origin is not None:
         await phone_prompt(
             message,
-            "Share your own Telegram contact using the button below; forwarded contacts cannot be used.",
+            "Share your own Telegram contact using the button below; forwarded contacts cannot be used",
         )
         return
     try:
@@ -42,11 +42,11 @@ async def receive_contact(
             message.contact.phone_number,
         )
     except RegistrationError as error:
-        await phone_prompt(message, str(error))
+        await phone_prompt(message, error_text(error))
         return
     await message.answer(
         **card(
-            "Phone number saved", "One last step: choose your education level below."
+            "Phone number saved", "One last step: choose your education level below"
         ).as_kwargs(),
         reply_markup=ReplyKeyboardRemove(),
     )

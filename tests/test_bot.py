@@ -84,7 +84,7 @@ async def send(app, text=None, *, user_id=100, chat_type="private", contact=None
     ]
 
 
-async def register(app, user_id=100):
+async def register(app, user_id=100, *, level="cifs"):
     await send(app, "00000001", user_id=user_id)
     code = app.registrar_service.send_verification_code.await_args.args[1]
     await send(app, code, user_id=user_id)
@@ -93,7 +93,7 @@ async def register(app, user_id=100):
         user_id=user_id,
         contact=Contact(phone_number="+998901234567", first_name="User", user_id=user_id),
     )
-    return await choose_level(app, user_id=user_id)
+    return await choose_level(app, user_id=user_id, level=level)
 
 
 async def choose_level(app, user_id=100, level="cifs"):
@@ -161,14 +161,18 @@ async def test_me_shows_only_the_profile_linked_to_the_current_telegram_user(app
         "00000002", "Other Student", "other@example.test", account="00000002@example.test"
     )
     app.registrar_service.find_student.return_value = other
-    await register(app, user_id=200)
+    await register(app, user_id=200, level="6")
     app.registrar_service.reset_mock()
 
-    for user_id, own, foreign in ((100, PERSON, other), (200, other, PERSON)):
+    for user_id, own, foreign, level in (
+        (100, PERSON, other, "CIFS"),
+        (200, other, PERSON, "Level 6"),
+    ):
         replies = await send(app, "/me", user_id=user_id)
         assert len(replies) == 1
         assert own.student_id in replies[0].text and own.email in replies[0].text
         assert own.name in replies[0].text
+        assert f"Education level: {level}" in replies[0].text
         assert foreign.student_id not in replies[0].text and foreign.email not in replies[0].text
         assert replies[0].reply_markup is None
     app.registrar_service.find_student.assert_not_called()

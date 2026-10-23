@@ -335,9 +335,12 @@ async def test_education_level_is_required_to_finish_registration_and_is_persist
     assert not await repository.awaiting_phone(100)
     assert await repository.awaiting_education(100)
     assert await repository.verified(100) is None
+    assert await repository.education_level(100) is None
     await repository.complete_registration(100, level)
     assert not await repository.awaiting_education(100)
     assert (await repository.verified(100)).student_id == PERSON.student_id
+    assert await repository.education_level(100) == level
+    assert await repository.education_level(999) is None
     async with repository.db.transaction() as session:
         user = await session.get(TelegramUser, 100)
         assert user.education_level == level

@@ -12,10 +12,10 @@ async def handle_error(event: ErrorEvent) -> bool:
     logger.error("Update failed (%s).", type(event.exception).__name__)
     try:
         if event.update.message:
-            await event.update.message.answer("Something went wrong. Please try again later.")
+            await event.update.message.answer("Something went wrong. Please try again later")
         elif event.update.callback_query:
             await event.update.callback_query.answer(
-                "Something went wrong. Please try again later.", show_alert=True
+                "Something went wrong. Please try again later", show_alert=True
             )
     except TelegramAPIError:
         logger.warning("Could not send the error response.")

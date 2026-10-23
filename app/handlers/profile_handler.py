@@ -5,7 +5,9 @@ from aiogram.types import Message
 from app.chat_formatting import student_profile
 
 
-async def cmd_me(message: Message, command: CommandObject, verified_student) -> None:
+async def cmd_me(
+    message: Message, command: CommandObject, verified_student, registration_repository
+) -> None:
     if command.args:
         await message.answer("Use /me without arguments to view your own profile")
         return
@@ -13,7 +15,8 @@ async def cmd_me(message: Message, command: CommandObject, verified_student) -> 
         await message.answer("Complete registration first\nSend /start to begin")
         return
     # Middleware loads this profile only from the authenticated Telegram sender's ID.
-    await message.answer(**student_profile(verified_student).as_kwargs())
+    level = await registration_repository.education_level(message.from_user.id)
+    await message.answer(**student_profile(verified_student, education_level=level).as_kwargs())
 
 
 def create_router() -> Router:

@@ -12,22 +12,22 @@ async def cmd_help(message: Message, can_open_panel=False, verified_student=None
         text += Text(
             Bold("Register once"),
             "\n",
-            "1. Send your student ID, including leading zeroes.\n",
-            "2. Enter the 6-digit code from your Outlook email.\n",
-            "3. Tap Share phone number to share your own contact.\n",
-            "4. Choose your current education level.\n\n",
-            "Codes expire after 10 minutes and allow 5 incorrect attempts.\n\n",
+            "1. Send your student ID, including leading zeroes\n",
+            "2. Enter the 6-digit code from your Outlook email\n",
+            "3. Tap Share phone number to share your own contact\n",
+            "4. Choose your current education level\n\n",
+            "Codes expire after 10 minutes and allow 5 incorrect attempts\n\n",
         )
     else:
         text += Text(
             Bold("Your profile"),
             "\n",
-            "Use /me to view your own verified student profile.\n\n",
+            "Use /me to view your own verified student profile\n\n",
         )
     text += Text(
         Bold("Join an event"),
         "\n",
-        "Scan its QR code with your camera and open the bot (tap Start if Telegram asks).\n",
+        "Scan its QR code with your camera and open the bot (tap Start if Telegram asks)\n",
         "Complete any event questions here in chat\n\n",
         Bold("Organize an event"),
         "\n",

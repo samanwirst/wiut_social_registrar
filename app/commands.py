@@ -17,23 +17,26 @@ logger = logging.getLogger(__name__)
 
 COMMANDS = {
     "start": "Start or resume registration",
-    "me": "View your own student profile",
     "new_event": "Create an event",
     "panel": "Events and participants",
     "resend": "Resend email code",
+    "me": "View your own student profile",
     "help": "Help and commands",
+    "info": "About the bot and project",
 }
 
 
 def chat_commands(*, registered=False, organizer=False) -> list[BotCommand]:
     names = ["start"]
     if registered:
-        names.extend(("me", "new_event"))
+        names.append("new_event")
         if organizer:
             names.append("panel")
     else:
         names.append("resend")
-    names.append("help")
+    if registered:
+        names.append("me")
+    names.extend(("help", "info"))
     descriptions = {**COMMANDS, "start": "Start the bot"} if registered else COMMANDS
     return [BotCommand(command=name, description=descriptions[name]) for name in names]
 

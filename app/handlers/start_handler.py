@@ -2,7 +2,7 @@ from aiogram import Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message, ReplyKeyboardRemove
 
-from app.chat_formatting import card, event_confirmation
+from app.chat_formatting import card, error_text, event_confirmation
 from app.dialogs.registration import code_prompt, prompt_remaining_profile_fields, welcome
 from app.dialogs.surveys import resume_survey, send_question
 from app.event_repository import EventError, event_id_from_payload
@@ -25,13 +25,13 @@ async def cmd_start(
             event_id = event_id_from_payload(command.args)
             event, status = await event_repository.visit(message.from_user.id, event_id)
         except EventError as error:
-            await message.answer(str(error))
+            await message.answer(error_text(error))
             return
         if status == "needs_form":
             try:
                 step = await event_survey.begin(message.from_user.id, event.id)
             except EventError as error:
-                await message.answer(str(error))
+                await message.answer(error_text(error))
                 return
             if step:
                 await send_question(message, step)
@@ -45,8 +45,8 @@ async def cmd_start(
         await message.answer(
             **card(
                 f"Event saved: {event.title}",
-                "Complete your student registration below.\n"
-                "Then answer any event questions here to finish joining.",
+                "Complete your student registration below\n"
+                "Then answer any event questions here to finish joining",
             ).as_kwargs(),
         )
     if verified_student:

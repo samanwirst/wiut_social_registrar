@@ -9,6 +9,8 @@ from registrar.config import Settings
 from registrar.graph import GraphClient
 from registrar.models import Student, validate_student_id
 
+PRODUCTION_BOT_USERNAME = "social_registrar_bot"
+
 
 class RegistrarService:
     """One worker owns the Graph session and MSAL cache."""
@@ -35,11 +37,12 @@ class RegistrarService:
     async def send_verification_code(self, student: Student, code: str, ttl_seconds: int) -> None:
         # Only this fixed template is exposed to the bot; callers cannot supply mail content.
         body = (
-            f"Your WIUT Social Registrar verification code is:\n\n{code}\n\n"
-            f"Student ID: {student.student_id}\n"
-            f"This code expires in {ttl_seconds // 60} minutes and can only be used once.\n"
-            "Enter it in the Telegram bot where you requested registration.\n"
-            "If you did not request this code, you can ignore this email."
+            f"Your Social Registrar verification code is:\n\n{code}\n\n"
+            f"This code expires in {ttl_seconds // 60} minutes and can only be used once\n"
+            "Enter the code in: "
+            f"https://t.me/{PRODUCTION_BOT_USERNAME}\n\n"
+            "If you did not request this code, you can ignore this email\n"
+            "Do not share this code with anyone!"
         )
         await self._call(
             self._client.send_email, student, "WIUT Social Registrar verification code", body

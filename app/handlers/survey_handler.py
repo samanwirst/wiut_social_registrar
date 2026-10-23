@@ -3,7 +3,7 @@ import re
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
-from app.chat_formatting import event_confirmation
+from app.chat_formatting import error_text, event_confirmation
 from app.dialogs.messages import update_keyboard
 from app.dialogs.surveys import question_keyboard, resume_survey, send_question
 from app.event_errors import EventError
@@ -14,7 +14,7 @@ async def answer_callback(callback: CallbackQuery, event_survey):
         r"form:([a-f0-9]{16}):(choose|toggle|next|skip)(?::([0-9]{1,2}))?", callback.data or ""
     )
     if match is None:
-        await callback.answer("Invalid question button. Send /start to continue.", show_alert=True)
+        await callback.answer("Invalid question button. Send /start to continue", show_alert=True)
         return
     try:
         step, completed = await event_survey.respond(
@@ -24,7 +24,7 @@ async def answer_callback(callback: CallbackQuery, event_survey):
             option=int(match[3]) if match[3] is not None else None,
         )
     except EventError as error:
-        await callback.answer(str(error), show_alert=True)
+        await callback.answer(error_text(error), show_alert=True)
         return
     await callback.answer()
     toggled = match[2] == "toggle"

@@ -13,12 +13,12 @@ class PrivateChatMiddleware(BaseMiddleware):
                 or event.message.chat.type != "private"
                 or event.message.chat.id != event.from_user.id
             ):
-                await event.answer("Open a private chat with the bot to continue.", show_alert=True)
+                await event.answer("Open a private chat with the bot to continue", show_alert=True)
                 return
         else:
             if event.chat.type != "private":
                 await event.answer(
-                    "Please open a private chat with the bot to register or view your own profile."
+                    "Please open a private chat with the bot to register or view your own profile"
                 )
                 return
             if event.from_user is None or event.from_user.is_bot:
