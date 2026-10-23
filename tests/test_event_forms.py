@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import func, select
 
+from app.db import Database
 from app.event_forms import validate_answers, validate_questions
 from app.event_repository import EventError, EventRepository
 from app.models import (
@@ -82,8 +83,7 @@ async def test_form_enrollment_waits_for_final_answer_and_persists_no_profile_fi
     step, _ = await survey.respond(200, token=step.token, action="choose", option=1)
     with pytest.raises(EventError, match="earlier question"):
         await survey.respond(200, token=first_token, action="choose", option=0)
-    step, _ = await survey.respond(200, token=step.token, action="toggle", option=0)
-    step, _ = await survey.respond(200, token=step.token, action="next")
+    step, _ = await survey.respond(200, token=step.token, action="choose", option=0)
     assert step.index == 3 and (await events.members(100, event.id)).total == 0
     step, completed = await survey.respond(200, token=step.token, action="skip")
     assert step is None and completed.id == event.id
@@ -275,10 +275,73 @@ async def test_required_choices_and_invalid_options_do_not_advance(repository):
     ]:
         with pytest.raises(EventError, match=message):
             await survey.respond(200, **kwargs)
-    step, _ = await survey.respond(200, token=step.token, action="toggle", option=1)
-    step, _ = await survey.respond(200, token=step.token, action="toggle", option=1)
-    assert step.answers[step.question["id"]] == []
     assert (await survey.resume(200)).index == 0
+    _, completed = await survey.respond(200, token=step.token, action="choose", option=1)
+    assert completed.id == event.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action, option", [("next", None), ("toggle", 0), ("choose", 1)])
+async def test_pre_upgrade_selections_and_tokens_survive_restart(repository, action, option):
+    questions = [question(), question("multiple_choice")]
+    events, event = await configured(repository, questions)
+    await registered(repository, 200)
+    await events.visit(200, event.id)
+    survey = EventSurvey(events)
+    await survey.begin(200, event.id)
+    before, _ = await survey.respond(200, text="Saved before deployment")
+    # This is the durable draft produced by the previous toggle/Continue UI.
+    async with repository.db.transaction(write=True) as session:
+        draft = await session.get(EventFormSession, 200)
+        draft.answers = {**draft.answers, questions[1]["id"]: ["Option A"]}
+        expires_at = draft.expires_at
+    url = repository.db.engine.url
+    await repository.db.close()
+    restarted_db = Database(url)
+    try:
+        restarted_events = EventRepository(restarted_db, clock=repository.clock)
+        restarted = EventSurvey(restarted_events)
+        current = await restarted.resume(200)
+        assert current.index == before.index and current.token == before.token
+        assert current.answers[questions[0]["id"]] == "Saved before deployment"
+        async with restarted_db.transaction() as session:
+            assert (await session.get(EventFormSession, 200)).expires_at == expires_at
+        _, completed = await restarted.respond(
+            200, token=before.token, action=action, option=option
+        )
+        assert completed.id == event.id
+        async with restarted_db.transaction() as session:
+            response = (await session.scalars(select(EventAnswers))).one()
+            assert response.answers == {
+                questions[0]["id"]: "Saved before deployment",
+                questions[1]["id"]: ["Option A", "Option B"] if option == 1 else ["Option A"],
+            }
+            assert await session.get(EventFormSession, 200) is None
+        assert (await restarted_events.members(100, event.id)).total == 1
+    finally:
+        await restarted_db.close()
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_choice_clicks_cannot_answer_the_next_question(repository):
+    questions = [question("multiple_choice"), question("multiple_choice")]
+    events, event = await configured(repository, questions)
+    await registered(repository, 200)
+    survey = EventSurvey(events)
+    first = await survey.begin(200, event.id)
+    results = await asyncio.gather(
+        survey.respond(200, token=first.token, action="choose", option=0),
+        survey.respond(200, token=first.token, action="toggle", option=1),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(result, EventError) for result in results) == 1
+    current = await survey.resume(200)
+    assert current.index == 1 and current.token != first.token
+    assert set(current.answers) == {questions[0]["id"]}
+    assert (await events.members(100, event.id)).total == 0
+    _, completed = await survey.respond(200, token=current.token, action="choose", option=1)
+    assert completed.id == event.id
+    assert (await events.members(100, event.id)).total == 1
 
 
 @pytest.mark.asyncio

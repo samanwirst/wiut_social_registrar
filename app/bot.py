@@ -21,6 +21,7 @@ from app.repositories import RegistrationRepository
 from app.services.answer_cleanup import AnswerCleanup
 from app.services.registrar_service import RegistrarService
 from app.services.registration_service import RegistrationService
+from app.services.update_drain import UpdateDrain
 from app.surveys import EventSurvey
 from config import BotSettings
 from registrar.config import ConfigurationError
@@ -50,6 +51,7 @@ class BotApp:
         self.registration_service = RegistrationService(
             self.registration_repository, self.registrar_service
         )
+        self.update_drain = UpdateDrain()
         self.dp = Dispatcher(
             events_isolation=SimpleEventIsolation(),
             registrar_service=self.registrar_service,
@@ -61,6 +63,7 @@ class BotApp:
             command_menu=self.command_menu,
         )
         self.dp.include_routers(*create_routers())
+        self.dp.update.outer_middleware(self.update_drain)
         for observer in (self.dp.message, self.dp.callback_query):
             observer.middleware(PrivateChatMiddleware())
             observer.middleware(UserContextMiddleware())
@@ -101,3 +104,4 @@ class BotApp:
             resources.push_async_callback(self.registrar_service.close)
             resources.push_async_callback(self.answer_cleanup.close)
             resources.push_async_callback(self.miniapp_server.close)
+            resources.push_async_callback(self.update_drain.close)

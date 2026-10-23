@@ -732,18 +732,18 @@ async def test_new_student_enters_event_questions_only_after_full_account_regist
 
 
 @pytest.mark.asyncio
-async def test_multiselect_toggle_continue_and_skip_in_chat(app):
+@pytest.mark.parametrize("legacy_button", [False, True])
+async def test_choice_advances_immediately_and_optional_question_can_be_skipped(app, legacy_button):
     event = await form_event(
         app, [("Pick sessions", "multiple_choice", True), ("Any comment?", "text", False)]
     )
     replies = await send(app, f"/start event_{event.id}")
+    assert "Choose one option below" in replies[-1].text
     choices = replies[-1].reply_markup.inline_keyboard
-    await callback(app, choices[0][0].callback_data)
-    from aiogram.methods import EditMessageReplyMarkup
-
-    edited = methods(app, EditMessageReplyMarkup)[-1]
-    assert edited.reply_markup.inline_keyboard[0][0].text == "✓ Morning"
-    await callback(app, edited.reply_markup.inline_keyboard[-1][0].callback_data)
+    assert [row[0].text for row in choices] == ["Morning", "Evening"]
+    data = choices[0][0].callback_data
+    await callback(app, data.replace(":choose:", ":toggle:") if legacy_button else data)
+    assert methods(app, EditMessageReplyMarkup)[-1].reply_markup is None
     current = methods(app, SendMessage)[-1]
     assert "Any comment?" in current.text
     await callback(app, current.reply_markup.inline_keyboard[0][0].callback_data)

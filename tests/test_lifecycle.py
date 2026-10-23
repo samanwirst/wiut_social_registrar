@@ -1,8 +1,10 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from aiogram.types import Chat, Message, Update, User
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.bot import BotApp
@@ -92,4 +94,63 @@ async def test_shutdown_closes_other_resources_even_if_one_close_fails(tmp_path,
             resource.close.assert_awaited_once()
     finally:
         app.miniapp_server.close.side_effect = None
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drains_active_and_same_user_queued_updates_before_closing_clients(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr("app.bot.RegistrarService", lambda _: AsyncMock())
+    app = BotApp(
+        BotSettings(TEST_TOKEN, Settings(tmp_path / ".env"), verification_secret="ab" * 32)
+    )
+    entered = [asyncio.Event(), asyncio.Event()]
+    release = [asyncio.Event(), asyncio.Event()]
+    tasks = []
+
+    async def pause(handler, update, data):
+        index = update.update_id - 1
+        entered[index].set()
+        await release[index].wait()
+        return await handler(update, data)
+
+    app.dp.update.outer_middleware(pause)
+    try:
+        await app.database.migrate()
+        await app.bot.session.close()
+        app.bot.session = AsyncMock()
+        app.database.close = AsyncMock(wraps=app.database.close)
+        for number in (1, 2):
+            update = Update(
+                update_id=number,
+                message=Message(
+                    message_id=number,
+                    date=datetime.now(timezone.utc),
+                    chat=Chat(id=100, type="private"),
+                    from_user=User(id=100, is_bot=False, first_name="Student"),
+                    text="/help",
+                ),
+            )
+            tasks.append(asyncio.create_task(app.dp.feed_update(app.bot, update)))
+            if number == 1:
+                await asyncio.wait_for(entered[0].wait(), timeout=2)
+        tasks.append(asyncio.create_task(app.shutdown()))
+        await asyncio.sleep(0)
+        assert not tasks[-1].done()
+        app.database.close.assert_not_awaited()
+        release[0].set()
+        await asyncio.wait_for(entered[1].wait(), timeout=2)
+        assert not tasks[-1].done()
+        app.database.close.assert_not_awaited()
+        app.bot.session.close.assert_not_awaited()
+        release[1].set()
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=2)
+        app.database.close.assert_awaited_once()
+        app.bot.session.close.assert_awaited_once()
+        app.registrar_service.find_student.assert_not_called()
+    finally:
+        for barrier in release:
+            barrier.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await app.shutdown()

@@ -88,6 +88,9 @@ profiles, attendance, or analytics, and answer contents never enter those perman
 `BotApp` owns all runtime resources. Shutdown uses `AsyncExitStack` to close every resource
 even when another close fails. HTTP startup cleans up its runner on bind/setup failures or
 cancellation. Cleanup task cancellation and HTTP close are repeatable.
+After polling stops, the update-drain middleware waits for active chat handlers, including
+updates queued on a student's isolation lock, before database and network clients close.
+Already committed registration stages and questionnaire tokens remain in the database.
 
 ## Graph and console
 

@@ -17,20 +17,20 @@ def apply_question_response(question, previous, *, text=None, action=None, optio
             kind not in {"single_choice", "multiple_choice"}
             or type(option) is not int
             or not 0 <= option < len(question["options"])
-            or (action == "choose") != (kind == "single_choice")
+            or (action == "toggle" and kind != "multiple_choice")
         ):
             raise EventError("Choose a valid option using the latest buttons.")
         value = question["options"][option]
         if kind == "multiple_choice":
             values = list(answers.get(key, []))
-            if value in values:
-                values.remove(value)
-            else:
+            # Keep selections saved by the previous multi-select UI during an upgrade.
+            if value not in values:
                 values.append(value)
             answers[key] = values
-            return answers, False
-        answers[key] = value
+        else:
+            answers[key] = value
     elif action == "next" and kind == "multiple_choice":
+        # Already-sent Continue buttons can submit selections saved before the upgrade.
         pass
     elif action == "skip" and not question["required"]:
         answers.pop(key, None)
