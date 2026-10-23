@@ -9,21 +9,15 @@ from app.event_errors import EventError
 
 def question_keyboard(step):
     question, rows = step.question, []
-    kind, selected = question["type"], step.answers.get(question["id"], [])
+    kind = question["type"]
     if kind in {"single_choice", "multiple_choice"}:
-        action = "choose" if kind == "single_choice" else "toggle"
         for index, option in enumerate(question["options"]):
-            label = ("✓ " if option in selected and kind == "multiple_choice" else "") + option
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=label, callback_data=f"form:{step.token}:{action}:{index}"
+                        text=option, callback_data=f"form:{step.token}:choose:{index}"
                     )
                 ]
-            )
-        if kind == "multiple_choice":
-            rows.append(
-                [InlineKeyboardButton(text="Continue", callback_data=f"form:{step.token}:next")]
             )
     if not question["required"]:
         rows.append([InlineKeyboardButton(text="Skip", callback_data=f"form:{step.token}:skip")])
@@ -38,7 +32,7 @@ async def send_question(message, step):
         "text": "Send your answer as a message",
         "number": "Send a number as a message",
         "single_choice": "Choose one option below",
-        "multiple_choice": "Choose one or more options below, then tap Continue",
+        "multiple_choice": "Choose one option below",
     }[question["type"]]
     text = Text(
         Bold(step.event.title),

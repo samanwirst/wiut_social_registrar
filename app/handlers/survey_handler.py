@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery
 
 from app.chat_formatting import error_text, event_confirmation
 from app.dialogs.messages import update_keyboard
-from app.dialogs.surveys import question_keyboard, resume_survey, send_question
+from app.dialogs.surveys import resume_survey, send_question
 from app.event_errors import EventError
 
 
@@ -27,10 +27,7 @@ async def answer_callback(callback: CallbackQuery, event_survey):
         await callback.answer(error_text(error), show_alert=True)
         return
     await callback.answer()
-    toggled = match[2] == "toggle"
-    await update_keyboard(callback.message, question_keyboard(step) if toggled else None)
-    if toggled:
-        return
+    await update_keyboard(callback.message, None)
     if completed:
         await callback.message.answer(**event_confirmation(completed).as_kwargs())
         await resume_survey(callback.message, event_survey, callback.from_user.id)
