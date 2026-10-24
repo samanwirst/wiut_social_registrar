@@ -1,5 +1,7 @@
 # WIUT Social Registrar
 
+Designed and developed by [Mukhammadiev Samandar](https://t.me/samanwirst), [WestDevs](https://t.me/westdevs)
+
 A Telegram bot for student and event registration. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
 
 Registration is open to everyone in private chats. Verification emails use a fixed template; Telegram users cannot send arbitrary emails. Registered users view only their own linked profile with `/me`; the bot does not offer student-directory searches. The Graph core retains its local console lookup and email tools.
