@@ -7,6 +7,9 @@ interface TelegramWebApp {
   ready(): void;
   expand(): void;
   isVersionAtLeast(version: string): boolean;
+  setHeaderColor?(color: string): void;
+  setBackgroundColor?(color: string): void;
+  setBottomBarColor?(color: string): void;
   onEvent(event: string, callback: () => void): void;
   offEvent(event: string, callback: () => void): void;
   enableClosingConfirmation(): void;
@@ -45,6 +48,13 @@ export function useTelegramTheme() {
       preferred.removeEventListener('change', update);
     };
   }, []);
-  useEffect(() => { document.documentElement.style.colorScheme = appearance; }, [appearance]);
+  useEffect(() => {
+    document.documentElement.style.colorScheme = appearance;
+    if (supports('6.1')) {
+      telegram?.setHeaderColor?.('secondary_bg_color');
+      telegram?.setBackgroundColor?.('secondary_bg_color');
+    }
+    if (supports('7.10')) telegram?.setBottomBarColor?.('secondary_bg_color');
+  }, [appearance]);
   return { appearance, platform: (['ios', 'macos'].includes(telegram?.platform ?? '') ? 'ios' : 'base') as 'ios' | 'base' };
 }

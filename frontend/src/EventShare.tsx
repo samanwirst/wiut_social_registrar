@@ -19,7 +19,7 @@ export function EventShare({ event, notify }: { event: EventDetails; notify: Not
     anchor.href = qr; anchor.download = `event-${event.id}.png`; anchor.click();
   };
 
-  return <Section className="qr-page" header="Event QR code"
+  return <Section className="studio-section qr-page" header="Event QR code"
     footer="Students scan this QR code with their camera. Registration and questions happen in the bot.">
     <div className="share-content">
       <div className="qr-wrap">{qr ? <img id="event-qr" src={qr} alt="Scan to register for this event" width={300} height={300} />

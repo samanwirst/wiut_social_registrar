@@ -45,6 +45,33 @@ def contrast(first, second):
     return (levels[1] + 0.05) / (levels[0] + 0.05)
 
 
+async def assert_native_geometry(page, platform):
+    geometry = await page.evaluate("""() => {
+        const visible = node => node.getClientRects().length > 0;
+        const styles = selector => [...document.querySelectorAll(selector)].filter(visible)
+            .map(node => ({radius: getComputedStyle(node).borderTopLeftRadius,
+                height: node.getBoundingClientRect().height}));
+        return {
+            sections: styles('.studio-section > div > div'),
+            controls: styles('.field > div > label, .poll-option-row > div > label'),
+            buttons: styles('.event-studio button:not([role=tab]):not(.event-card):not(.poll-option-remove)'),
+            arrows: [...document.querySelectorAll('.event-studio button')]
+                .filter(node => /[←→↑↓›＋]/u.test(node.textContent)).map(node => node.textContent),
+            overflow: document.documentElement.scrollWidth > window.innerWidth,
+            chrome: [window.testHeaderColor, window.testBackgroundColor, window.testBottomBarColor],
+        };
+    }""")
+    assert not geometry["overflow"], geometry
+    assert not geometry["arrows"], geometry
+    assert geometry["chrome"] == ["secondary_bg_color"] * 3, geometry
+    assert all(item["radius"] == "12px" for item in geometry["sections"]), geometry
+    radius = "12px" if platform == "ios" else "8px"
+    assert all(item["radius"] == radius for item in geometry["controls"]), geometry
+    assert all(item["radius"] == radius for item in geometry["buttons"]), geometry
+    assert all(item["height"] >= 44 for item in geometry["buttons"]), geometry
+    assert all(item["height"] >= 48 for item in geometry["controls"]), geometry
+
+
 async def main():
     with TemporaryDirectory() as directory:
         db = Database("sqlite+aiosqlite:///" + directory + "/qa.sqlite3")
@@ -102,6 +129,9 @@ async def main():
         window.Telegram = {WebApp: {
             initData: __INIT_DATA__, colorScheme: 'light', platform: 'android',
             ready(){}, expand(){}, isVersionAtLeast(){return true;},
+            setHeaderColor(color){window.testHeaderColor=color;},
+            setBackgroundColor(color){window.testBackgroundColor=color;},
+            setBottomBarColor(color){window.testBottomBarColor=color;},
             onEvent(name, callback) {
                 if (!listeners.has(name)) listeners.set(name, new Set());
                 listeners.get(name).add(callback);
@@ -178,6 +208,7 @@ async def main():
                     "y"
                 ] < 45
                 await page.screenshot(path=str(OUT / "telegram-desktop-night.png"), full_page=True)
+                await assert_native_geometry(page, "base")
                 await page.evaluate("""() => {
                     for (const name of [...document.documentElement.style]) {
                         if (name.startsWith('--tg-theme-')) document.documentElement.style.removeProperty(name);
@@ -188,9 +219,24 @@ async def main():
                 await page.get_by_role("button", name="Welcome Night").click()
                 await page.get_by_role("heading", name="Welcome Night").wait_for()
                 assert await page.locator("#event-qr").count() == 0 and not qr_requests
+                await page.get_by_role("tab", name="Overview", exact=True).focus()
+                await page.keyboard.press("ArrowRight")
+                assert (
+                    await page.get_by_role("tab", name="Questions", exact=True).get_attribute(
+                        "aria-selected"
+                    )
+                    == "true"
+                )
+                await page.keyboard.press("ArrowLeft")
+                assert (
+                    await page.get_by_role("tab", name="Overview", exact=True).get_attribute(
+                        "aria-selected"
+                    )
+                    == "true"
+                )
                 await page.get_by_role("tab", name="Questions", exact=True).click()
                 assert await page.locator("#event-qr").count() == 0 and not qr_requests
-                await page.get_by_role("button", name="+ Add question").click()
+                await page.get_by_role("button", name="Add question").click()
                 await page.get_by_placeholder("What would you like to ask?").fill(
                     "Which session would you like to join?"
                 )
@@ -231,6 +277,16 @@ async def main():
                 await page.get_by_role("button", name="Remove option 3", exact=True).click()
                 await page.get_by_role("button", name="Save changes", exact=True).click()
                 await page.get_by_text("All changes saved", exact=True).wait_for()
+                await page.locator(".studio-snackbar").evaluate(
+                    "node => Promise.all(node.getAnimations().map(animation => animation.finished))"
+                )
+                toast = await page.locator(".studio-snackbar").bounding_box()
+                savebar = await page.locator(".savebar").bounding_box()
+                assert toast is not None and savebar is not None
+                assert (
+                    toast["y"] + toast["height"] <= savebar["y"]
+                    or savebar["y"] + savebar["height"] <= toast["y"]
+                ), (toast, savebar)
                 event = await events.settings(100, draft.id)
                 assert event.questions[0]["options"] == ["Morning", "Evening"]
                 assert event.questions[0]["type"] == "multiple_choice"
@@ -259,7 +315,7 @@ async def main():
                 assert await page.locator("#event-qr").count() == 0
                 assert await page.get_by_label("Option 1", exact=True).input_value() == "Morning"
                 assert await page.get_by_label("Option 2", exact=True).input_value() == "Evening"
-                await page.get_by_role("button", name="← All events").click()
+                await page.get_by_role("button", name="All events").click()
                 await page.get_by_role("button", name="Career Lab 2026").click()
                 await page.get_by_role("tab", name="Participants", exact=True).click()
                 await page.get_by_text("12 participants · 10 per page", exact=True).wait_for()
@@ -268,7 +324,7 @@ async def main():
                 )
                 assert await page.locator("#event-qr").count() == 0
                 assert await page.locator("tbody tr").count() == 10
-                await page.get_by_role("button", name="Next →", exact=True).click()
+                await page.get_by_role("button", name="Next", exact=True).click()
                 await page.get_by_text("Page 2 of 2", exact=True).wait_for()
                 assert await page.locator("tbody tr").count() == 2
                 await page.get_by_role("button", name="Refresh", exact=True).click()
@@ -292,13 +348,13 @@ async def main():
                 await page.screenshot(path=str(OUT / "mobile-overview.png"), full_page=True)
                 await page.get_by_label("Event name", exact=True).fill("Unsaved name")
                 page.once("dialog", lambda dialog: dialog.dismiss())
-                await page.get_by_role("button", name="← All events").click()
+                await page.get_by_role("button", name="All events").click()
                 assert (
                     await page.get_by_label("Event name", exact=True).input_value()
                     == "Unsaved name"
                 )
                 page.once("dialog", lambda dialog: dialog.accept())
-                await page.get_by_role("button", name="← All events").click()
+                await page.get_by_role("button", name="All events").click()
                 await page.get_by_role("heading", name="Your events").wait_for()
                 await page.get_by_role("button", name="Career Lab 2026").click()
                 assert (
@@ -373,11 +429,126 @@ async def main():
                 assert await ios_page.evaluate(
                     "document.documentElement.scrollWidth <= window.innerWidth"
                 )
+                await ios_page.evaluate("""() => {
+                    document.documentElement.style.setProperty('--tg-safe-area-inset-bottom', '12px');
+                    document.documentElement.style.setProperty('--tg-content-safe-area-inset-bottom', '20px');
+                }""")
+                assert (
+                    await ios_page.locator(".savebar").evaluate(
+                        "node => getComputedStyle(node).bottom"
+                    )
+                    == "44px"
+                )
                 await ios_page.screenshot(path=str(OUT / "ios-questions.png"), full_page=True)
+
+                # Review the same surfaces and geometry in both platform variants,
+                # appearances and narrow/wide Telegram windows. All data is synthetic.
+                for platform, visual in [("base", page), ("ios", ios_page)]:
+                    for appearance in ("light", "dark"):
+                        for view, event_id, tab in [
+                            ("events", None, None),
+                            ("overview", draft.id, "Overview"),
+                            ("questions", draft.id, "Questions"),
+                            ("participants", career.id, "Participants"),
+                            ("qr", draft.id, "QR"),
+                        ]:
+                            await visual.set_viewport_size({"width": 390, "height": 844})
+                            suffix = f"?event={event_id}" if event_id else ""
+                            await visual.goto(f"http://127.0.0.1:{port}/{suffix}")
+                            title = (
+                                "Your events"
+                                if event_id is None
+                                else (
+                                    "Career Lab 2026" if event_id == career.id else "Welcome Night"
+                                )
+                            )
+                            await visual.get_by_role("heading", name=title, exact=True).wait_for()
+                            await visual.evaluate("mode => window.testTheme(mode)", appearance)
+                            if platform == "base" and appearance == "dark":
+                                await visual.evaluate("""() => {
+                                    const palette = {bg_color:'#17212b', secondary_bg_color:'#232e3c',
+                                        section_bg_color:'#17212b', text_color:'#f5f5f5', hint_color:'#708499',
+                                        subtitle_text_color:'#708499', link_color:'#6ab3f3', button_color:'#5288c1',
+                                        button_text_color:'#ffffff', section_header_text_color:'#6ab3f3'};
+                                    for (const [key,value] of Object.entries(palette)) {
+                                        document.documentElement.style.setProperty('--tg-theme-'+key.replaceAll('_','-'), value);
+                                    }
+                                }""")
+                            if tab:
+                                await visual.get_by_role("tab", name=tab, exact=True).click()
+                                assert (
+                                    await visual.get_by_role(
+                                        "tab", name=tab, exact=True
+                                    ).get_attribute("aria-selected")
+                                    == "true"
+                                )
+                            if view == "participants":
+                                await visual.get_by_text(
+                                    "12 participants · 10 per page", exact=True
+                                ).wait_for()
+                                await visual.locator("tbody tr").first.wait_for()
+                            if view == "qr":
+                                await visual.locator("#event-qr").wait_for()
+                                await visual.locator("#event-qr").evaluate(
+                                    "image => image.decode()"
+                                )
+                            await visual.mouse.move(0, 0)
+                            if tab:
+                                await visual.locator(".tabs").evaluate(
+                                    "node => Promise.all(node.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {})))"
+                                )
+                            await visual.evaluate(
+                                "() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+                            )
+                            await assert_native_geometry(visual, platform)
+                            await visual.screenshot(
+                                path=str(OUT / f"native-{platform}-{appearance}-{view}.png"),
+                                full_page=True,
+                                animations="disabled",
+                            )
+                            if view == "questions":
+                                add_question = visual.get_by_role(
+                                    "button", name="Add question", exact=True
+                                )
+                                await add_question.scroll_into_view_if_needed()
+                                action = await add_question.bounding_box()
+                                bar = await visual.locator(".savebar").bounding_box()
+                                assert action is not None and bar is not None
+                                assert action["y"] + action["height"] <= bar["y"], (action, bar)
+                                await visual.screenshot(
+                                    path=str(
+                                        OUT / f"native-{platform}-{appearance}-question-actions.png"
+                                    ),
+                                    animations="disabled",
+                                )
+                            for width in (320, 900):
+                                await visual.set_viewport_size({"width": width, "height": 844})
+                                await assert_native_geometry(visual, platform)
+                # Older clients keep their supported native colors and skip 7.10 methods.
+                legacy = await browser.new_context(viewport={"width": 390, "height": 844})
+                await legacy.route(
+                    "https://telegram.org/js/telegram-web-app.js",
+                    lambda route: route.fulfill(
+                        content_type="application/javascript",
+                        body=sdk.replace(
+                            "isVersionAtLeast(){return true;}",
+                            "isVersionAtLeast(version){return version === '6.1';}",
+                        ),
+                    ),
+                )
+                legacy_page = await legacy.new_page()
+                legacy_page.on("pageerror", lambda error: browser_errors.append(str(error)))
+                await legacy_page.goto(f"http://127.0.0.1:{port}/")
+                await legacy_page.get_by_role("heading", name="Your events").wait_for()
+                assert await legacy_page.evaluate("window.testHeaderColor") == "secondary_bg_color"
+                assert (
+                    await legacy_page.evaluate("window.testBackgroundColor") == "secondary_bg_color"
+                )
+                assert await legacy_page.evaluate("window.testBottomBarColor === undefined")
                 await browser.close()
             assert not browser_errors, browser_errors
             print(
-                "Browser QA passed: separate QR page, lazy loading, transparent PNG download, no delete button, MCQ forms, 10-row pagination, Android/iOS layouts, themes, safe areas and unsaved changes."
+                "Browser QA passed: QR export, MCQ forms, 10-row pagination, Android/iOS layouts, light/dark themes, safe areas, unsaved changes, native geometry and controls at 320/390/900px."
             )
             print("Synthetic screenshots:", OUT)
         finally:

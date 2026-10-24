@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Button, Caption, IconButton, Input } from '@telegram-apps/telegram-ui';
+import { PlusIcon } from './Icons';
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 20;
@@ -46,7 +47,7 @@ export function PollOptions({ options, locked, disabled, onChange }: {
           if (index < options.length - 1) inputs.current[index + 1]?.focus(); else add();
         }} />
     </div>)}</div>
-    {!locked ? <Button type="button" mode="plain" size="s" className="poll-option-add" before={<span aria-hidden="true">＋</span>}
+    {!locked ? <Button type="button" mode="plain" size="s" className="poll-option-add" before={<PlusIcon />}
       disabled={disabled || options.length >= MAX_OPTIONS} onClick={add}>Add option</Button> : null}
     <Caption className="muted poll-option-count">{options.length} / {MAX_OPTIONS} options · At least {MIN_OPTIONS} required</Caption>
   </fieldset>;
