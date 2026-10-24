@@ -21,7 +21,15 @@ export interface Event {
   created_at: string;
 }
 
-export interface EventDetails extends Event { link: string }
+export interface EventDetails extends Event { link: string; qr_styling_enabled: boolean }
+export interface QrDesign {
+  id: string;
+  status: 'generating' | 'verifying' | 'ready' | 'failed';
+  error: string;
+  elapsed_seconds: number;
+  retry_after: number;
+}
+export interface QrDesignSelection { selected: QrDesign | null; active: QrDesign | null; retry_after: number }
 export interface Pagination { page: number; pages: number; total: number }
 export interface EventsPage extends Pagination { events: (Event & { members: number })[] }
 

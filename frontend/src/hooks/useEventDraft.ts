@@ -26,7 +26,7 @@ export function useEventDraft(event: EventDetails, guard: MutableRefObject<() =>
       const updated = await api<Event>(`/api/events/${event.id}`, { method: 'PUT', body: JSON.stringify({
         title, description, registration_open, questions, response_retention_days, revision,
       }) });
-      const next = { ...updated, link: event.link };
+      const next = { ...updated, link: event.link, qr_styling_enabled: event.qr_styling_enabled };
       onSaved(next);
       setDraft(structuredClone(next));
       setDirty(false);

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { Button, Caption, Cell, Input, List, Section, Switch, TabsList, Textarea, Title } from '@telegram-apps/telegram-ui';
 import { useEventDraft } from './hooks/useEventDraft';
+import { useQrDesign } from './hooks/useQrDesign';
 import { Questions } from './Questions';
 import { Field } from './Field';
 import { Participants } from './Participants';
@@ -16,6 +17,7 @@ export function EventEditor({ event, guard, notify, onSaved }: {
 }) {
   const [tab, setTab] = useState<Tab>('overview');
   const { draft, dirty, saving, change, save } = useEventDraft(event, guard, onSaved, notify);
+  const qrDesigner = useQrDesign(event.id);
 
   return <>
     <div className="page-heading"><Title level="1" Component="h1">{event.title}</Title>
@@ -33,7 +35,7 @@ export function EventEditor({ event, guard, notify, onSaved }: {
         {value === 'qr' ? 'QR' : value[0].toUpperCase() + value.slice(1)}</TabsList.Item>)}</TabsList>
     <div id="event-content" role="tabpanel" aria-labelledby={`event-tab-${tab}`}>
     {tab === 'participants' ? <Participants eventId={event.id} />
-      : tab === 'qr' ? <EventShare event={event} notify={notify} />
+      : tab === 'qr' ? <EventShare event={event} designer={qrDesigner} notify={notify} />
       : <form className="event-form" onSubmit={save} aria-label="Event settings">
         {tab === 'overview' ? <List className="section-list editor-fields">
           <Section className="studio-section" header="Event details">

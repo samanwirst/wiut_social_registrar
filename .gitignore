@@ -155,6 +155,9 @@ activemq-data/
 .env.*
 !.env.example
 .local/
+.bot-health.json
+.bot-watchdog*.json
+.bot-watchdog*.lock
 .envrc
 .venv
 env/

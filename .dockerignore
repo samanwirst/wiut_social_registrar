@@ -4,6 +4,9 @@
 venv
 env
 .local
+**/.bot-health.json
+**/.bot-watchdog*.json
+**/.bot-watchdog*.lock
 .env
 .env.*
 !.env.example

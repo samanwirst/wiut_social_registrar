@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -17,14 +18,19 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from io import BytesIO
+
 from aiogram.types import User
 from aiohttp import web
+from PIL import Image, ImageDraw
 from playwright.async_api import async_playwright
 
 from app.db import Database
 from app.event_repository import EventRepository
 from app.miniapp import create_web_app
 from app.repositories import RegistrationRepository
+from app.services.qr_art import QrDesignError, scan_verified
+from app.services.qr_designer import QrDesigner
 from registrar.models import Student
 from tests.helpers import complete_student_registration, signed_init_data
 
@@ -119,7 +125,23 @@ async def main():
         bot = SimpleNamespace(
             token=TOKEN, me=AsyncMock(return_value=SimpleNamespace(username="example_bot"))
         )
-        runner = web.AppRunner(create_web_app(events, bot), access_log=None)
+        art = Image.new("RGB", (1024, 1024), "#244d25")
+        draw = ImageDraw.Draw(art)
+        for y in range(0, 1024, 64):
+            for x in range(0, 1024, 64):
+                draw.rectangle(
+                    (x, y, x + 63, y + 63), fill=(20 + x % 180, 70 + y % 150, 35 + (x + y) % 80)
+                )
+        image_buffer = BytesIO()
+        art.save(image_buffer, format="PNG")
+        provider = SimpleNamespace(generate=AsyncMock(return_value=image_buffer.getvalue()))
+        qr_clock_offset = [0]
+        qr_designer = QrDesigner(
+            provider=provider, clock=lambda: time.monotonic() + qr_clock_offset[0]
+        )
+        runner = web.AppRunner(
+            create_web_app(events, bot, qr_designer=qr_designer), access_log=None
+        )
         await runner.setup()
         site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
@@ -168,7 +190,9 @@ async def main():
                 page.on(
                     "request",
                     lambda request: (
-                        qr_requests.append(request.url) if request.url.endswith("/qr") else None
+                        qr_requests.append(request.url)
+                        if request.url.split("?")[0].endswith("/qr")
+                        else None
                     ),
                 )
                 await page.goto(f"http://127.0.0.1:{port}/")
@@ -311,6 +335,295 @@ async def main():
                 await download.save_as(OUT / "event-qr.png")
                 assert (OUT / "event-qr.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 await page.screenshot(path=str(OUT / "desktop-qr.png"), full_page=True)
+                await page.locator(".qr-background").click()
+                assert not await page.get_by_label(
+                    "Transparent background", exact=True
+                ).is_checked()
+                await page.get_by_text("PNG · Opaque background", exact=True).wait_for()
+                await page.locator("#event-qr").wait_for()
+                await page.get_by_label("Design prompt").fill(
+                    "Warm autumn colors and soft natural textures"
+                )
+                assert (
+                    await page.get_by_label("Design prompt").get_attribute("placeholder")
+                    == "Describe the theme, colors, and style you have in mind"
+                )
+                artwork_entered, release_artwork = asyncio.Event(), asyncio.Event()
+
+                async def slow_artwork(_):
+                    artwork_entered.set()
+                    await asyncio.wait_for(release_artwork.wait(), timeout=40)
+                    return image_buffer.getvalue()
+
+                provider.generate.side_effect = slow_artwork
+                submitted, release_submission = asyncio.Event(), asyncio.Event()
+
+                async def slow_submission(route):
+                    response = await route.fetch()
+                    submitted.set()
+                    await asyncio.wait_for(release_submission.wait(), timeout=10)
+                    await route.fulfill(response=response)
+
+                await page.route("**/qr/designs", slow_submission)
+                await page.get_by_role("button", name="Generate design", exact=True).click()
+                await asyncio.wait_for(submitted.wait(), timeout=5)
+                await page.get_by_text("Sending your request", exact=True).wait_for()
+                assert (
+                    await page.get_by_role("button", name="Download PNG", exact=True).count() == 0
+                )
+                # Switching tabs never cancels the server job. The job is resumed by ID.
+                await page.get_by_role("tab", name="Questions", exact=True).click()
+                await page.get_by_role("tab", name="QR", exact=True).click()
+                release_submission.set()
+                await asyncio.wait_for(artwork_entered.wait(), timeout=5)
+                await page.get_by_text("Creating your image", exact=True).wait_for()
+                await page.locator(".qr-result").screenshot(path=str(OUT / "qr-generating.png"))
+                await page.set_viewport_size({"width": 390, "height": 760})
+                for appearance in ("light", "dark"):
+                    await page.evaluate("mode => window.testTheme(mode)", appearance)
+                    await page.locator(".qr-result").scroll_into_view_if_needed()
+                    await page.screenshot(path=str(OUT / f"qr-generating-{appearance}-mobile.png"))
+                    assert not await page.evaluate(
+                        "document.documentElement.scrollWidth > innerWidth"
+                    )
+                await page.emulate_media(reduced_motion="reduce")
+                assert (
+                    await page.locator(".qr-generation-canvas").evaluate(
+                        "node => getComputedStyle(node, '::before').animationName"
+                    )
+                    == "none"
+                )
+                await page.emulate_media(reduced_motion="no-preference")
+                await page.set_viewport_size({"width": 1280, "height": 1000})
+                await page.evaluate("window.testTheme('light')")
+                assert (
+                    await page.locator(".qr-generation-stages [aria-current=step]").inner_text()
+                    == "Create artwork"
+                )
+
+                async def lost_status(route):
+                    await route.fulfill(status=503, json={"error": "Connection interrupted"})
+
+                await page.route("**/qr/designs/*", lost_status)
+                await page.get_by_role("button", name="Reconnect", exact=True).wait_for()
+                await page.get_by_text("Connection interrupted", exact=True).wait_for()
+                assert provider.generate.await_count == 1
+                await page.unroute("**/qr/designs/*", lost_status)
+                await page.get_by_role("button", name="Reconnect", exact=True).click()
+                await page.get_by_text("Creating your image", exact=True).wait_for()
+
+                verifying_shown = [False]
+
+                async def expose_verification(route):
+                    response = await route.fetch()
+                    data = await response.json()
+                    if data.get("status") == "ready" and not verifying_shown[0]:
+                        verifying_shown[0] = True
+                        data["status"] = "verifying"
+                    await route.fulfill(response=response, json=data)
+
+                await page.route("**/qr/designs/*", expose_verification)
+                release_artwork.set()
+                await page.get_by_text("Checking QR readability", exact=True).wait_for()
+                await page.locator(".qr-result").screenshot(path=str(OUT / "qr-verifying.png"))
+                assert (
+                    await page.locator(".qr-generation-stages [aria-current=step]").inner_text()
+                    == "Check QR"
+                )
+                assert (
+                    await page.get_by_role("button", name="Download PNG", exact=True).count() == 0
+                )
+                await page.get_by_text(
+                    "PNG · Opaque background · Scan checked", exact=True
+                ).wait_for()
+                await page.unroute("**/qr/designs/*", expose_verification)
+                assert await page.get_by_role("button", name="Reconnect", exact=True).count() == 0
+                assert (
+                    await page.get_by_role("button", name="Check status", exact=True).count() == 0
+                )
+                assert await page.get_by_role(
+                    "button", name="Generate again in", exact=False
+                ).is_disabled()
+                assert (
+                    await page.get_by_label("Design prompt").input_value()
+                    == "Warm autumn colors and soft natural textures"
+                )
+                await page.locator(".qr-background").click()
+                await page.get_by_text(
+                    "PNG · Transparent background · Scan checked", exact=True
+                ).wait_for()
+                await page.locator("#event-qr").wait_for()
+                assert provider.generate.await_count == 1
+                await page.unroute("**/qr/designs", slow_submission)
+                async with page.expect_download() as styled_export:
+                    await page.get_by_role("button", name="Download PNG", exact=True).click()
+                styled_download = await styled_export.value
+                assert styled_download.suggested_filename == f"event-{draft.id}-design.png"
+                await styled_download.save_as(OUT / "event-qr-design-transparent.png")
+                with Image.open(OUT / "event-qr-design-transparent.png") as exported_image:
+                    assert exported_image.mode == "RGBA"
+                    assert scan_verified(
+                        exported_image, f"https://t.me/example_bot?start=event_{draft.id}"
+                    )
+                await page.locator(".qr-background").click()
+                assert not await page.get_by_label(
+                    "Transparent background", exact=True
+                ).is_checked()
+                await page.get_by_text(
+                    "PNG · Opaque background · Scan checked", exact=True
+                ).wait_for()
+                await page.locator("#event-qr").wait_for()
+                async with page.expect_download() as opaque_export:
+                    await page.get_by_role("button", name="Download PNG", exact=True).click()
+                await (await opaque_export.value).save_as(OUT / "event-qr-design-opaque.png")
+                with Image.open(OUT / "event-qr-design-opaque.png") as exported_image:
+                    assert exported_image.mode == "RGB"
+                    assert scan_verified(
+                        exported_image, f"https://t.me/example_bot?start=event_{draft.id}"
+                    )
+                assert provider.generate.await_count == 1
+                await page.screenshot(path=str(OUT / "desktop-qr-design.png"), full_page=True)
+                # Telegram can reopen a Mini App in a completely fresh WebView.
+                # The server selection restores the exact bytes, without relying
+                # on either browser storage or a fresh provider request.
+                fresh = await browser.new_context(viewport={"width": 390, "height": 844})
+                await fresh.route(
+                    "https://telegram.org/js/telegram-web-app.js",
+                    lambda route: route.fulfill(content_type="application/javascript", body=sdk),
+                )
+                reopened = await fresh.new_page()
+                standard_requests = []
+                reopened.on(
+                    "request",
+                    lambda request: (
+                        standard_requests.append(request.url)
+                        if request.url.split("?")[0].endswith("/qr")
+                        else None
+                    ),
+                )
+
+                async def lost_selection(route):
+                    await route.fulfill(status=503, json={"error": "Connection interrupted"})
+
+                await reopened.route("**/qr/designs", lost_selection)
+                await reopened.goto(f"http://127.0.0.1:{port}/?event={draft.id}")
+                await reopened.get_by_role("tab", name="QR", exact=True).click()
+                await reopened.get_by_text("Connection interrupted", exact=True).wait_for()
+                assert await reopened.locator("#event-qr").count() == 0
+                assert not standard_requests
+                await reopened.unroute("**/qr/designs", lost_selection)
+                await reopened.get_by_role("button", name="Reconnect", exact=True).click()
+                await reopened.get_by_text(
+                    "PNG · Transparent background · Scan checked", exact=True
+                ).wait_for()
+                await reopened.locator("#event-qr").wait_for()
+                async with reopened.expect_download() as fresh_export:
+                    await reopened.get_by_role("button", name="Download PNG", exact=True).click()
+                await (await fresh_export.value).save_as(OUT / "event-qr-reopened.png")
+                assert (OUT / "event-qr-reopened.png").read_bytes() == (
+                    OUT / "event-qr-design-transparent.png"
+                ).read_bytes()
+                assert not standard_requests and provider.generate.await_count == 1
+                await reopened.screenshot(path=str(OUT / "qr-reopened-mobile.png"), full_page=True)
+                await fresh.close()
+                # Reopen a ready job after its cooldown, then verify failed regeneration
+                # preserves the checked PNG instead of silently replacing it with a plain QR.
+                qr_clock_offset[0] += 31
+                await page.goto(f"http://127.0.0.1:{port}/?event={draft.id}")
+                await page.get_by_role("tab", name="QR", exact=True).click()
+                await page.get_by_text(
+                    "PNG · Opaque background · Scan checked", exact=True
+                ).wait_for()
+                assert not await page.get_by_label(
+                    "Transparent background", exact=True
+                ).is_checked()
+                await page.locator("#event-qr").wait_for()
+                previous_preview = await page.locator("#event-qr").get_attribute("src")
+                provider.generate.side_effect = QrDesignError(
+                    "The image provider is busy — try again later"
+                )
+                await page.get_by_label("Design prompt").fill(
+                    "Cool blue colors and abstract shapes"
+                )
+                await page.get_by_role("button", name="Generate design", exact=True).click()
+                await page.get_by_text("Couldn't create this design", exact=True).wait_for()
+                assert await page.locator("#event-qr").get_attribute("src") == previous_preview
+                assert await page.get_by_role(
+                    "button", name="Download PNG", exact=True
+                ).is_enabled()
+                assert await page.get_by_role("button", name="Reconnect", exact=True).count() == 0
+                await page.locator(".qr-result").screenshot(
+                    path=str(OUT / "qr-generation-failed.png")
+                )
+                await page.get_by_role("button", name="Use standard QR", exact=True).click()
+                await page.get_by_text("PNG · Opaque background", exact=True).wait_for()
+                qr_clock_offset[0] += 31
+                await page.goto(f"http://127.0.0.1:{port}/?event={draft.id}")
+                await page.get_by_role("tab", name="QR", exact=True).click()
+                await page.locator("#event-qr").wait_for()
+
+                async def quota_wait(route):
+                    await route.fulfill(
+                        status=429,
+                        headers={"Retry-After": "2"},
+                        json={
+                            "error": "Your next design will be available shortly",
+                            "retry_after": 2,
+                        },
+                    )
+
+                await page.route("**/qr/designs", quota_wait)
+                await page.get_by_label("Design prompt").fill("Simple shapes and warm colors")
+                await page.get_by_role("button", name="Generate design", exact=True).click()
+                await page.get_by_role("button", name="Generate again in", exact=False).wait_for()
+                assert await page.get_by_role(
+                    "button", name="Generate again in", exact=False
+                ).is_disabled()
+                assert await page.get_by_role("alert").count() == 0
+                assert (
+                    await page.get_by_role("button", name="Check status", exact=True).count() == 0
+                )
+                assert await page.get_by_role("button", name="Reconnect", exact=True).count() == 0
+                await page.get_by_role("button", name="Generate design", exact=True).wait_for()
+                assert await page.get_by_role(
+                    "button", name="Generate design", exact=True
+                ).is_enabled()
+                assert provider.generate.await_count == 2
+                await page.unroute("**/qr/designs", quota_wait)
+
+                # Expiration is recoverable, rather than an endless generating state.
+                stale_once = [True]
+
+                async def expired_active_job(route):
+                    if stale_once[0]:
+                        stale_once[0] = False
+                        await route.fulfill(
+                            json={
+                                "selected": None,
+                                "active": {
+                                    "id": "expired-preview",
+                                    "status": "generating",
+                                    "error": "",
+                                    "elapsed_seconds": 0,
+                                    "retry_after": 0,
+                                },
+                                "retry_after": 0,
+                            }
+                        )
+                    else:
+                        await route.continue_()
+
+                await page.route("**/qr/designs", expired_active_job)
+                await page.goto(f"http://127.0.0.1:{port}/?event={draft.id}")
+                await page.get_by_role("tab", name="QR", exact=True).click()
+                await page.get_by_text(
+                    "This preview has expired — generate a new design when you are ready",
+                    exact=True,
+                ).wait_for()
+                await page.locator("#event-qr").wait_for()
+                assert await page.get_by_role("button", name="Reconnect", exact=True).count() == 0
+                assert await page.get_by_role("alert").count() == 0
+                await page.unroute("**/qr/designs", expired_active_job)
                 await page.get_by_role("tab", name="Questions", exact=True).click()
                 assert await page.locator("#event-qr").count() == 0
                 assert await page.get_by_label("Option 1", exact=True).input_value() == "Morning"

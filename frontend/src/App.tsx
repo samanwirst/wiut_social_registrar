@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { AppRoot, Button, Caption, Placeholder, Snackbar, Spinner } from '@telegram-apps/telegram-ui';
+import { AppRoot, Button, Placeholder, Snackbar, Spinner } from '@telegram-apps/telegram-ui';
 import { useWorkspace } from './hooks/useWorkspace';
 import { EventEditor } from './EventEditor';
 import { EventList } from './EventList';
@@ -13,7 +13,7 @@ function Workspace() {
 
   return <>
     {event ? <header className="brandbar"><Button type="button" mode="plain" size="s" before={<Chevron direction="left" />} disabled={loading} onClick={() => { void loadEvents(listPage); }}>
-      All events</Button><Caption className="muted">Event Studio</Caption></header> : null}
+      All events</Button></header> : null}
     <main className="page" aria-busy={loading}>
       {error ? <Placeholder header="We couldn't open your workspace" description={error}
         action={<Button type="button" mode="bezeled" onClick={retry}>Try again</Button>} />

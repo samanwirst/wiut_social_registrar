@@ -9,6 +9,8 @@ from aiogram.utils.token import TokenValidationError, validate_token
 
 from app.configuration.database import load_database_url
 from app.configuration.miniapp import load_mini_app
+from app.configuration.qr_images import QrImageSettings
+from monitoring.state import admin_ids
 from registrar.config import ConfigurationError, Settings
 from registrar.environment import read_environment, save_environment_value
 
@@ -26,6 +28,8 @@ class BotSettings:
     telegram_test_environment: bool = False
     mini_app_tls_cert_file: Path | None = None
     mini_app_tls_key_file: Path | None = None
+    qr_images: QrImageSettings = field(default_factory=QrImageSettings, repr=False)
+    admin_ids: tuple[int, ...] = ()
 
     @classmethod
     def load(cls, env_file: Path | None = None) -> BotSettings:
@@ -57,6 +61,10 @@ class BotSettings:
                 "BOT_VERIFICATION_SECRET must contain 64 hexadecimal characters."
             )
         mini = load_mini_app(values, graph.env_file, telegram_test)
+        try:
+            administrators = admin_ids(values.get("BOT_ADMIN_IDS"))
+        except ValueError as error:
+            raise ConfigurationError(str(error)) from None
         return cls(
             token=token,
             graph=graph,
@@ -69,4 +77,6 @@ class BotSettings:
             telegram_test_environment=telegram_test,
             mini_app_tls_cert_file=mini.cert_file,
             mini_app_tls_key_file=mini.key_file,
+            qr_images=QrImageSettings.load(values),
+            admin_ids=administrators,
         )

@@ -1,6 +1,8 @@
 import { telegram } from './telegram';
 
-class ApiError extends Error {}
+export class ApiError extends Error {
+  constructor(message: string, readonly status = 0, readonly retryAfter = 0) { super(message); }
+}
 
 async function request(path: string, options: RequestInit = {}, responseType: 'json' | 'blob' = 'json') {
   const controller = new AbortController();
@@ -15,7 +17,9 @@ async function request(path: string, options: RequestInit = {}, responseType: 'j
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      throw new ApiError(typeof data?.error === 'string' ? data.error : 'Please try again later.');
+      const retry = Number(data?.retry_after ?? response.headers.get('Retry-After'));
+      throw new ApiError(typeof data?.error === 'string' ? data.error : 'Please try again later.',
+        response.status, Number.isFinite(retry) ? Math.max(0, Math.min(300, retry)) : 0);
     }
     // Read within the timeout too, so a stalled response body cannot leave the UI busy.
     return responseType === 'blob' ? await response.blob() : await response.json();
@@ -30,8 +34,9 @@ async function request(path: string, options: RequestInit = {}, responseType: 'j
 }
 
 export function api<T>(path: string, options?: RequestInit): Promise<T> { return request(path, options); }
-export function eventQr(id: string, signal: AbortSignal): Promise<Blob> {
-  return request(`/api/events/${encodeURIComponent(id)}/qr`, { signal }, 'blob');
+export function eventQr(id: string, signal: AbortSignal, transparent = true, designId = ''): Promise<Blob> {
+  const suffix = designId ? `/designs/${encodeURIComponent(designId)}/image` : '';
+  return request(`/api/events/${encodeURIComponent(id)}/qr${suffix}?transparent=${transparent}`, { signal }, 'blob');
 }
 
 export const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Please try again.';

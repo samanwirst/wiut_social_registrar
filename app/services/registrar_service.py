@@ -28,7 +28,8 @@ class RegistrarService:
         return await loop.run_in_executor(self._worker, partial(function, *args))
 
     async def check_connection(self) -> None:
-        await self._call(self._client.profile)
+        # A health probe must reach Graph even when sender identity is cached.
+        await self._call(partial(self._client.profile, refresh=True))
 
     async def find_student(self, student_id: str, *, refresh: bool = False) -> Student | None:
         student_id = validate_student_id(student_id)

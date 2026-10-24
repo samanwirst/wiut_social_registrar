@@ -93,6 +93,7 @@ async def test_owner_can_configure_event_and_view_qr_and_participants(client):
     assert data["total"] == 1 and data["events"][0]["members"] == 0
     response = await client.get(f"/api/events/{client.event_id}", headers=headers())
     event = await response.json()
+    assert event["qr_styling_enabled"] is False
     assert event["link"] == f"https://t.me/example_bot?start=event_{client.event_id}"
     body = {
         key: event[key]
@@ -118,6 +119,17 @@ async def test_owner_can_configure_event_and_view_qr_and_participants(client):
     assert (await qr.read()).startswith(b"\x89PNG\r\n\x1a\n")
     response = await client.get(f"/api/events/{client.event_id}/members", headers=headers())
     assert (await response.json())["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ai_designs_are_optional_and_disabled_without_provider_credentials(client):
+    response = await client.post(
+        f"/api/events/{client.event_id}/qr/designs",
+        headers=headers(),
+        json={"prompt": "Voxel world"},
+    )
+    assert response.status == 400 and "not enabled" in (await response.json())["error"]
+    assert (await client.get(f"/api/events/{client.event_id}/qr", headers=headers())).status == 200
 
 
 @pytest.mark.asyncio

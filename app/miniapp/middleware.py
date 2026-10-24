@@ -5,6 +5,10 @@ from aiohttp import web
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.event_errors import EventError
+from app.services.qr_art import QrDesignError
+from app.services.qr_designer import QrDesignCooldown
+
+from .state import HEALTH
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +17,13 @@ logger = logging.getLogger(__name__)
 async def errors_and_headers(request, handler):
     try:
         response = await handler(request)
-    except EventError as error:
+    except QrDesignCooldown as error:
+        response = web.json_response(
+            {"error": str(error), "retry_after": error.retry_after},
+            status=429,
+            headers={"Retry-After": str(error.retry_after)},
+        )
+    except (EventError, QrDesignError) as error:
         response = web.json_response({"error": str(error)}, status=400)
     except web.HTTPException as error:
         response = web.json_response(
@@ -22,9 +32,16 @@ async def errors_and_headers(request, handler):
         )
     except (SQLAlchemyError, TelegramAPIError) as error:
         logger.error("Mini App operation failed (%s).", type(error).__name__)
+        if monitor := request.app.get(HEALTH):
+            monitor.incident("miniapp", error)
         response = web.json_response(
             {"error": "The service is temporarily unavailable. Please try again."}, status=503
         )
+    except Exception as error:
+        logger.error("Mini App request failed (%s)", type(error).__name__)
+        if monitor := request.app.get(HEALTH):
+            monitor.incident("miniapp", error)
+        response = web.json_response({"error": "Please try again later"}, status=500)
     response.headers.update(
         {
             "Cache-Control": "no-store",

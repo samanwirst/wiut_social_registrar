@@ -42,13 +42,12 @@ async def test_retention_retries_safely_and_close_cancels_the_worker(caplog):
 
 
 @pytest.mark.asyncio
-async def test_failed_initial_retention_does_not_leave_a_background_task():
+async def test_failed_initial_retention_keeps_a_retry_worker_instead_of_aborting_startup():
     repository = AsyncMock()
     repository.purge_answers.side_effect = SQLAlchemyError("unavailable")
     cleanup = AnswerCleanup(repository)
-    with pytest.raises(SQLAlchemyError):
-        await cleanup.start()
-    assert cleanup.task is None
+    await cleanup.start()
+    assert cleanup.task is not None and not cleanup.task.done()
     await cleanup.close()
 
 

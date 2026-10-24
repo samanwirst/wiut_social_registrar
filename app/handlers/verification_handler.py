@@ -30,7 +30,9 @@ async def cmd_resend(
         return
     except GraphError as error:
         logger.warning("Registration email unavailable (%s).", type(error).__name__)
-        await message.answer("Registration is temporarily unavailable. Please try again later")
+        await message.answer(
+            "Registration is temporarily unavailable\nWe couldn't send a verification email — please try again later"
+        )
         return
     await code_prompt(message, status)
 

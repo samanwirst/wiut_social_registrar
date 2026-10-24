@@ -20,6 +20,7 @@ preserves their public commands, API payloads, configuration, and database schem
 | Outlook profile synchronization and analytics record creation | `app/registration/profiles.py`, `history.py` |
 | Stable event API, without SQL | `app/event_repository.py` |
 | Event metadata, ownership, and revisions | `app/events/settings.py`, `access.py` |
+| Selected QR designs and atomic PNG replacement | `app/events/qr_designs.py` |
 | Event editor input validation | `app/events/validation.py` |
 | Invitations and atomic enrollment | `app/events/enrollment.py` |
 | Authorized event/member pages and contact projection | `app/events/queries.py` |
@@ -32,6 +33,10 @@ preserves their public commands, API payloads, configuration, and database schem
 | HTTP input/output, headers, and static allowlist | `app/miniapp/routes.py`, `middleware.py`, `assets.py` |
 | HTTP/TLS startup and shutdown | `app/miniapp/server.py` |
 | Independent answer expiration worker | `app/services/answer_cleanup.py` |
+| Dependency probes and private runtime heartbeat | `app/services/runtime_health.py` |
+| Independent process supervision and administrator delivery | `monitoring/`, `deploy/install_watchdog.py` |
+| Image generation jobs, provider access, and bounded temporary designs | `app/services/qr_designer.py` |
+| QR artwork composition and scan verification | `app/services/qr_art.py` |
 | Database sessions, dialect inserts, and migrations | `app/db.py` |
 | Telegram, database, and Mini App configuration | `config.py`, `app/configuration/` |
 
@@ -100,6 +105,10 @@ owns HTTP response handling, authentication refresh, bounded read retries, and s
 Ambiguous mail submission is never automatically retried. MSAL owns authentication.
 
 `RegistrarService` serializes Graph and MSAL calls through a single background worker.
+Normal startup defers Outlook availability to `RuntimeHealth`; strict diagnostic mode still
+requires it. A timed-out Outlook probe stays attached and does not enqueue another read.
+No email submission is retried by monitoring. Administrator IDs grant notification delivery
+only. See [monitoring.md](monitoring.md) for probe thresholds and operational limitations.
 `RegistrationService` only composes fixed verification email delivery with challenge
 reservation/status updates. Arbitrary email remains an explicitly confirmed console feature.
 The CLI separates argument parsing, a single lookup/email command, and interactive lookup.
@@ -113,7 +122,9 @@ Graph configuration, database validation, and Mini App URL/TLS validation have s
 Components render the existing TelegramUI interface. Focused hooks own shared behavior:
 
 - `useRemoteResource`: per-consumer request state, retry, abort, and stale-response suppression.
-- `useObjectUrl`: object URL allocation and cleanup for transparent QR downloads.
+- `useObjectUrl`: object URL allocation and cleanup for QR downloads.
+- `useQrDesign`: restoring the server's selected design and active job, bounded submissions,
+  abortable polling, elapsed/cooldown timers, and optional device-local background preference.
 - `useWorkspace`: initial loading and guarded navigation between event lists and details.
 - `useEventDraft`: immutable edits, revision-aware saves, and duplicate-save protection.
 - `useUnsavedChanges`: browser unload and Telegram closing/navigation guards.
@@ -123,6 +134,32 @@ API transport stays in `api.ts`. It sends signed `initData`, times out both head
 and never caches personal responses. The backend checks organizer status and event ownership.
 Browser state is not an authorization source. QR generation stays lazy on its own tab, and
 students complete questionnaires in the bot chat.
+
+QR designs use a separate asynchronous Cloudflare client owned by the HTTP application's
+cleanup context. No Graph worker or database transaction is held during generation.
+Submissions, job reads, and both image exports independently verify signed identity and
+event ownership. Temporary IDs never authorize access. A bounded in-memory job cache
+stores only ownership, status, and checked PNG exports; prompts live only in the active
+generation task. Provider responses and credentials are excluded from logs and API errors.
+`event_qr_designs` stores one selected design per event, with both PNGs committed together
+after scan verification. Metadata reads omit image blobs. Selection, status, image reads,
+and reset independently enforce organizer ownership. Reopening a fresh WebView or clearing
+the job cache restores selection from the database without another provider request.
+A failed generation/save leaves the previous row intact; ready status is published only
+after persistence commits. Reset awaits cancellation of pending generation before deleting
+selection, preventing late completion from restoring a deliberately removed design.
+Reset preserves cooldown history. Student and questionnaire transactions are unaffected.
+QR composition and scan checks run in background threads. Connected paths and rounded
+finder eyes retain the matrix's sampling centers outside the illustration. The center
+uses part of H-level error correction; a bounded local layout search requires the same
+illustration placement to scan in both backgrounds before either PNG is published.
+The illustration's white paper is removed only where connected to its outer boundary.
+Shutdown cancels pending provider tasks, awaits them, closes the client, and clears the
+temporary cache; the selected design remains in the database.
+Job metadata includes elapsed seconds and remaining cooldown; quota waits return HTTP 429
+with both a JSON `retry_after` and a `Retry-After` header. Repeated requests for an already
+active event job return that job. Client polling failures, generation failures, and cooldown
+notices are separate states, so reconnecting never creates an image or hides a valid result.
 
 ## Design basis
 

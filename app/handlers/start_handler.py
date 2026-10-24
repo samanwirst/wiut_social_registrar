@@ -57,8 +57,8 @@ async def cmd_start(
             )
     elif await prompt_remaining_profile_fields(message, registration_repository):
         return
-    elif await registration_repository.pending(message.from_user.id):
-        await code_prompt(message, "pending")
+    elif status := await registration_repository.email_status(message.from_user.id):
+        await code_prompt(message, status)
     else:
         await welcome(message)
 
