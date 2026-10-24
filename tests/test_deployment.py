@@ -133,6 +133,7 @@ def test_generated_user_service_passes_systemd_path_and_command_validation(tmp_p
     import shutil
     import subprocess
     import sys
+    import tempfile
 
     if not shutil.which("systemd-analyze"):
         pytest.skip("systemd-analyze is unavailable in this test image")
@@ -143,18 +144,19 @@ def test_generated_user_service_passes_systemd_path_and_command_validation(tmp_p
     paths = [tmp_path / (name + ".service"), tmp_path / (name + ".timer")]
     for path, content in zip(paths, (service, timer)):
         path.write_text(content)
-    runtime = tmp_path / "runtime"
-    runtime.mkdir(mode=0o700)
-    result = subprocess.run(
-        ["systemd-analyze", "--user", "verify", *map(str, paths)],
-        capture_output=True,
-        text=True,
-        env={
-            **os.environ,
-            "SYSTEMD_UNIT_PATH": str(tmp_path) + ":/usr/lib/systemd/user:/lib/systemd/user",
-            "XDG_RUNTIME_DIR": str(runtime),
-        },
-    )
+    # User socket addresses must fit Unix's short path limit. Pytest's verbose
+    # test directory can exceed that limit even though these units have no sockets.
+    with tempfile.TemporaryDirectory(prefix="registrar-runtime-") as runtime:
+        result = subprocess.run(
+            ["systemd-analyze", "--user", "verify", *map(str, paths)],
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "SYSTEMD_UNIT_PATH": str(tmp_path) + ":/usr/lib/systemd/user:/lib/systemd/user",
+                "XDG_RUNTIME_DIR": runtime,
+            },
+        )
     assert result.returncode == 0, result.stderr
     assert "not absolute" not in result.stderr
     assert "ignoring" not in result.stderr.lower()
