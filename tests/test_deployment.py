@@ -143,6 +143,8 @@ def test_generated_user_service_passes_systemd_path_and_command_validation(tmp_p
     paths = [tmp_path / (name + ".service"), tmp_path / (name + ".timer")]
     for path, content in zip(paths, (service, timer)):
         path.write_text(content)
+    runtime = tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
     result = subprocess.run(
         ["systemd-analyze", "--user", "verify", *map(str, paths)],
         capture_output=True,
@@ -150,6 +152,7 @@ def test_generated_user_service_passes_systemd_path_and_command_validation(tmp_p
         env={
             **os.environ,
             "SYSTEMD_UNIT_PATH": str(tmp_path) + ":/usr/lib/systemd/user:/lib/systemd/user",
+            "XDG_RUNTIME_DIR": str(runtime),
         },
     )
     assert result.returncode == 0, result.stderr
