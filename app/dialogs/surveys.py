@@ -47,7 +47,7 @@ async def send_question(message, step):
         text += Text("\n", Italic("Optional — you can skip this question"))
     if step.index == 0:
         text += Text(
-            f"\n\nAnswers are visible only to the organizer and kept for up to "
+            f". Answers are visible only to the organizer and kept for up to "
             f"{step.event.response_retention_days} days"
         )
     await message.answer(**text.as_kwargs(), reply_markup=question_keyboard(step))

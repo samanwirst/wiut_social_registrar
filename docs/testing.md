@@ -18,6 +18,11 @@ Tests exercise the public behavior of registration, OTP limits/replay, own-conta
 education steps, concurrent/idempotent event enrollment, transaction rollback, temporary
 questionnaires/answers, Mini App authorization, API serialization, pagination, and Graph/CLI
 behavior. Lifecycle regressions cover retention retry/cancellation and cleanup after failures.
+Monitoring regressions inject Outlook expiry/timeouts, failed email submissions, polling
+failures/recovery, stale heartbeats, supervisor probe failures, and ambiguous restart attempts.
+All Bot API, Docker, and systemd transports in those tests are mocked; operational setup alerts
+are an explicit manual action outside pytest. Tests verify private atomic state, recipient
+allowlists, notification deduplication/backoff, bounded repair, and status-aware `/start` resume.
 
 ## PostgreSQL
 
@@ -52,9 +57,21 @@ use signed synthetic Telegram initialization data, and exercise the real API and
 The SDK host is simulated; Graph and Telegram never receive messages.
 
 Checks cover event editing and save recovery, locked questions, poll option controls,
-ten-row pagination, contact fields, lazy transparent PNG QR export/download, native BackButton,
+ten-row pagination, contact fields, lazy PNG QR exports with both backgrounds, asynchronous
+AI design submission/resumption with a synthetic provider and real QR scan checks, native BackButton,
+generation stages, elapsed/cooldown displays, reconnecting without duplicate generation,
+preservation of the previous image after a failed regeneration, restoration in a completely
+fresh browser context, background preference after reload, and reconnecting a selection read
+without briefly displaying the standard QR,
 unsaved changes, Android/iOS layouts, light/dark themes, contrast, and safe areas. Screenshots
 contain synthetic data and are saved under a printed temporary directory for visual inspection.
+
+QR design regressions also check visible illustration colors, enclosed white details,
+rounded finder eyes, transparent four-module margins, multiple invitation lengths,
+rotated scans, and shared-layout repair when either background fails verification.
+Persistence checks cover application restart/cache expiry, identical PNG bytes, owner-only
+selection/reset, atomic concurrent replacement, failed saves, and reset during generation
+without losing rate-limit history. These repository fixtures run on PostgreSQL as well.
 
 ## Container checks
 

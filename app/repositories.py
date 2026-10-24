@@ -38,6 +38,9 @@ class RegistrationRepository:
     async def pending(self, user_id):
         return await self.verification.pending(user_id)
 
+    async def email_status(self, user_id):
+        return await self.verification.email_status(user_id)
+
     async def reserve_code(self, user_id, student, code):
         return await self.verification.reserve_code(user_id, student, code)
 

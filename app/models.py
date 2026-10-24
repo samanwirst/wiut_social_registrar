@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -136,6 +137,20 @@ class Event(Base):
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     form_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     form_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
+class EventQrDesign(Base):
+    """Only the selected, scan-checked design; transient jobs remain in memory."""
+
+    __tablename__ = "event_qr_designs"
+
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), primary_key=True
+    )
+    design_id: Mapped[str] = mapped_column(String(36), unique=True)
+    transparent_png: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    opaque_png: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
 class EventRegistration(Base):

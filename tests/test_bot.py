@@ -303,6 +303,39 @@ async def test_definite_submission_failure_invalidates_code(app):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["failed", "unknown", "pending", "accepted"])
+async def test_start_restores_real_email_status_without_claiming_a_failed_email_was_sent(
+    app, status
+):
+    await app.registration_repository.touch_user(User(id=100, is_bot=False, first_name="Student"))
+    nonce = await app.registration_repository.reserve_code(100, PERSON, "123456")
+    await app.registration_repository.mark_email(100, nonce, status)
+    replies = await send(app, "/start")
+    text = replies[-1].text
+    assert ("Microsoft accepted" in text) == (status == "accepted")
+    assert ("Open the Outlook mailbox" in text) == (status == "accepted")
+    if status == "failed":
+        assert "couldn't send" in text
+    elif status in {"unknown", "pending"}:
+        assert "did not confirm" in text
+    app.registrar_service.send_verification_code.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_submission_is_logged_and_reported_without_private_data(app, caplog):
+    app.registrar_service.send_verification_code.side_effect = SendStatusUnknown(
+        "private-token-and-code"
+    )
+    await send(app, "00000001")
+    assert "submission unconfirmed" in caplog.text
+    assert "private-token-and-code" not in caplog.text
+    assert "email:SendStatusUnknown" in app.health.incidents
+    replies = await send(app, "/start")
+    assert "did not confirm" in replies[-1].text
+    assert app.registrar_service.send_verification_code.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_repeated_and_concurrent_requests_send_one_email(app):
     await asyncio.gather(send(app, "00000001"), send(app, "00000001"))
     replies = await send(app, "/resend")

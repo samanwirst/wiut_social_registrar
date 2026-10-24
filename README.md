@@ -1,5 +1,7 @@
 # WIUT Social Registrar
 
+Designed and developed by [Mukhammadiev Samandar](https://t.me/samanwirst), [WestDevs](https://t.me/westdevs)
+
 A Telegram bot for student and event registration. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
 
 Registration is open to everyone in private chats. Verification emails use a fixed template; Telegram users cannot send arbitrary emails. Registered users view only their own linked profile with `/me`; the bot does not offer student-directory searches. The Graph core retains its local console lookup and email tools.
@@ -10,6 +12,10 @@ Production releases from `main`, GitHub Actions deployment, IP-based HTTPS, priv
 backups, and a separate development bot are documented in [deployment.md](docs/deployment.md).
 That guide also covers the optional `REGISTRAR_TELEGRAM_API_IPV4` setting for a
 container-specific Telegram routing override when the server cannot reach its DNS-selected address.
+
+Administrator alerts, recovery behavior, and the independent supervisor are described in
+[monitoring.md](docs/monitoring.md). Normal startup tolerates unavailable Outlook;
+`python main.py --check` still validates Telegram, the database, and Outlook strictly.
 
 ## Before you start
 
@@ -176,7 +182,7 @@ The Mini App becomes available only after a student **successfully creates their
 The organizer workspace provides:
 
 - Event name and description, and an open/closed registration switch.
-- A dedicated **QR** tab with a copyable registration link and a downloadable **PNG with a transparent background**. QR images load only when this tab is opened; the other pages focus on editing and participants.
+- A dedicated **QR** tab with a copyable registration link and downloadable **PNG**. Choose a transparent or opaque background, or describe a custom AI design. QR images load only when this tab is opened; the other pages focus on editing and participants.
 - Up to **20 questions**, with **Text response (TR)** and **Multiple choice (MC)** answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
 - A participant table with **10 rows per page**, contact details, Level, and one column per question. **Refresh** fetches current answers. Answers expire automatically according to the event's retention period.
 - Automatic expiration of extra answers after **30 days by default**. Retention is managed by the server.
@@ -190,6 +196,62 @@ Choice answers retain their existing storage format. Previously saved selections
 Unfinished answers are stored separately in `event_form_sessions` for **one hour of inactivity**, so restarts do not lose progress. They are removed after expiration or successful submission. Final answers live only in `event_answers`, with their own expiration timestamp; neither profile tables nor analytics events receive their contents. The final answer, questionnaire removal, and event enrollment commit in one database transaction. Repeated QR scans or old inline buttons cannot create duplicate participation or overwrite answers. Questions become immutable after the first submitted questionnaire, even after its answers expire, to preserve their meaning. Event details and registration status remain editable in the Mini App.
 
 Expired answers disappear from API results immediately. A cleanup job physically deletes expired answers and drafts at bot startup and every **10 minutes**, including when the Mini App is disabled. Database backups have their own lifecycle; align backup retention with your chosen answer retention policy if you make backups.
+
+### AI QR designs (optional)
+
+The QR tab accepts a style prompt, for example `Minecraft world, grass blocks, glowing diamond ore`.
+Generation uses [FLUX.1 Schnell on Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/)
+through its official REST API. No Cloudflare Worker deployment or domain is needed.
+
+In Cloudflare, open **Workers AI > Use REST API**, create a dedicated Workers AI token
+with Read/Edit permission for your account, and copy the Account ID. Add both to the
+selected private `.env` and restart the bot:
+
+```dotenv
+CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+CLOUDFLARE_API_TOKEN=your-workers-ai-token
+```
+
+Leave both empty to keep standard QR codes without AI. Credentials never reach the browser.
+Only the entered prompt is sent to Cloudflare; the event invitation, student records, answers,
+and Telegram authentication are not sent to the image provider.
+
+The [Workers Free plan](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+includes 10,000 Neurons per day; requests stop when its allocation is exhausted.
+Use that plan to avoid usage charges. Paid accounts can incur charges above the allowance.
+The application submits once per click, never retries generation automatically, allows at
+most two active jobs, and limits each organizer to one request every 30 seconds.
+The generation card shows the current stage and elapsed time, then replaces its animated
+preview with the checked image. The button counts down until the next generation is
+available. Repeated submissions resume an active design for the same event without
+requesting another image. **Reconnect** checks an interrupted job without regenerating it;
+if a new generation fails, the previous checked preview remains available to download.
+
+Both transparent and opaque PNGs use the same generated artwork. Changing the background
+does not request another image. Generation continues while navigating between tabs;
+returning to QR resumes the job. The latest successful design is saved with the event in
+SQLite or PostgreSQL, including both PNG backgrounds. Reopening the panel in a new WebView
+or restarting the bot restores the same design without generating again, even if AI is
+temporarily disabled. Background preference is remembered on the current device when
+browser storage is available. **Use standard QR** explicitly removes the saved selection
+and cancels a pending replacement; a failed generation leaves the existing design intact.
+Only temporary generation jobs expire after one hour (up to 12 in memory). Saved designs
+are replaced by the next successful generation or removed by **Use standard QR**.
+Prompts are not saved in the database. Event links and registrations are unaffected.
+
+The model creates a recognizable event illustration. Its colors carry into smooth,
+connected QR paths, rounded finder eyes, and accent dots. The illustration is integrated
+into the center; border-connected white paper is removed for transparent exports, while
+opaque exports include a softly illustrated background. Full-bleed artwork gets a rounded inset.
+The exact invitation payload, finder/timing areas, and
+[four-module quiet zone](https://www.qrcode.com/en/howto/code.html) remain protected.
+Center artwork uses part of H-level error correction and can cover central alignment marks.
+Up to four local layouts reduce its footprint until **both** backgrounds scan; this never
+requests another image or silently substitutes an ordinary QR code.
+Before any styled PNG is made available, ZXing checks the exact event URL at full size,
+300px, and with mild blur. Failed checks block the design download. These automated checks
+cannot guarantee every camera or printing condition: transparent QR codes need a light,
+plain surface, and every final printed design should be tested with a phone camera.
 
 ### Enable the Mini App
 
@@ -449,6 +511,8 @@ Lookup JSON contains `student_id`, `name`, `email`, `account`, `email_addresses`
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Required for the bot | Token from BotFather. |
+| `BOT_ADMIN_IDS` | `[]` | JSON array of numeric Telegram IDs for operational alerts, e.g. `[123456789]`; no extra access to student data. |
+| `REGISTRAR_MONITOR_CA_FILE` | System CA store | Optional public CA bundle for the supervisor's local HTTPS checks; TLS validation remains enabled. |
 | `APP_ENV` | `local` | `local` selects SQLite by default; `production` requires PostgreSQL. |
 | `DATABASE_URL` | Automatic | Optional explicit SQLAlchemy async database URL. |
 | `BOT_VERIFICATION_SECRET` | Generated automatically | Secret HMAC key for verification codes; persisted in `.env`. |

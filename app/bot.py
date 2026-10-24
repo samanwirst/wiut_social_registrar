@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import AsyncExitStack
 
@@ -21,6 +22,7 @@ from app.repositories import RegistrationRepository
 from app.services.answer_cleanup import AnswerCleanup
 from app.services.registrar_service import RegistrarService
 from app.services.registration_service import RegistrationService
+from app.services.runtime_health import RuntimeHealth
 from app.services.update_drain import UpdateDrain
 from app.surveys import EventSurvey
 from config import BotSettings
@@ -41,15 +43,25 @@ class BotApp:
             settings.graph.env_file, telegram_test=settings.telegram_test_environment
         )
         self.database = Database(url)
+        self.health = RuntimeHealth(
+            self.database,
+            self.registrar_service,
+            settings.graph.env_file.parent / ".bot-health.json",
+        )
+        self.bot.session.middleware.register(self.health.polling_request)
+        self._previous_exception_handler = None
+        self._exception_handler = None
         self.event_repository = EventRepository(self.database)
         self.event_survey = EventSurvey(self.event_repository)
-        self.miniapp_server = MiniAppServer(self.event_repository, self.bot, settings)
-        self.answer_cleanup = AnswerCleanup(self.event_repository)
+        self.miniapp_server = MiniAppServer(
+            self.event_repository, self.bot, settings, runtime_health=self.health
+        )
+        self.answer_cleanup = AnswerCleanup(self.event_repository, health=self.health)
         self.registration_repository = RegistrationRepository(
             self.database, settings.verification_secret
         )
         self.registration_service = RegistrationService(
-            self.registration_repository, self.registrar_service
+            self.registration_repository, self.registrar_service, health=self.health
         )
         self.update_drain = UpdateDrain()
         self.dp = Dispatcher(
@@ -61,6 +73,7 @@ class BotApp:
             event_survey=self.event_survey,
             mini_app_url=settings.mini_app_url,
             command_menu=self.command_menu,
+            runtime_health=self.health,
         )
         self.dp.include_routers(*create_routers())
         self.dp.update.outer_middleware(self.update_drain)
@@ -70,10 +83,11 @@ class BotApp:
             observer.middleware(CommandMenuMiddleware())
         self.dp.errors.register(handle_error)
 
-    async def check_connection(self):
+    async def check_connection(self, *, strict_outlook=True):
         await self.database.migrate()
         me = await self.bot.get_me()
-        await self.registrar_service.check_connection()
+        if strict_outlook:
+            await self.registrar_service.check_connection()
         return me
 
     async def run(self) -> None:
@@ -83,6 +97,17 @@ class BotApp:
                 "A Telegram webhook is configured. Remove it before starting long polling."
             )
         logger.info("Starting polling...")
+        loop = asyncio.get_running_loop()
+        self._previous_exception_handler = loop.get_exception_handler()
+
+        def report_exception(_, context):
+            error = context.get("exception") or RuntimeError()
+            self.health.incident("background", error)
+            logger.error("Background task failed (%s)", type(error).__name__)
+
+        self._exception_handler = report_exception
+        loop.set_exception_handler(report_exception)
+        await self.health.start()
         try:
             await self.command_menu.install_defaults(self.bot)
         except TelegramAPIError as error:
@@ -97,6 +122,13 @@ class BotApp:
         )
 
     async def shutdown(self) -> None:
+        loop = asyncio.get_running_loop()
+        if (
+            self._exception_handler is not None
+            and loop.get_exception_handler() is self._exception_handler
+        ):
+            loop.set_exception_handler(self._previous_exception_handler)
+            self._exception_handler = None
         async with AsyncExitStack() as resources:
             resources.push_async_callback(self.bot.session.close)
             resources.push_async_callback(self.dp.storage.close)
@@ -104,4 +136,5 @@ class BotApp:
             resources.push_async_callback(self.registrar_service.close)
             resources.push_async_callback(self.answer_cleanup.close)
             resources.push_async_callback(self.miniapp_server.close)
+            resources.push_async_callback(self.health.close)
             resources.push_async_callback(self.update_drain.close)

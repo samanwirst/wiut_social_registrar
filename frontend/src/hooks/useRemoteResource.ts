@@ -24,12 +24,12 @@ export function useRemoteResource<T>(load: (signal: AbortSignal) => Promise<T>) 
 }
 
 export function useObjectUrl(blob: Blob | null) {
-  const [url, setUrl] = useState('');
+  const [current, setCurrent] = useState<{ blob: Blob; url: string } | null>(null);
   useEffect(() => {
-    if (!blob) { setUrl(''); return; }
+    if (!blob) { setCurrent(null); return; }
     const next = URL.createObjectURL(blob);
-    setUrl(next);
+    setCurrent({ blob, url: next });
     return () => URL.revokeObjectURL(next);
   }, [blob]);
-  return url;
+  return current?.blob === blob ? current.url : '';
 }

@@ -43,8 +43,8 @@ class GraphClient:
         self._students.clear()
         return self.profile()
 
-    def profile(self) -> dict:
-        if self._profile is None:
+    def profile(self, *, refresh: bool = False) -> dict:
+        if self._profile is None or refresh:
             response = self.transport.request("GET", "/me", params={"$select": PROFILE_FIELDS})
             data = self.transport.data(response)
             upn, mail = data.get("userPrincipalName"), data.get("mail")

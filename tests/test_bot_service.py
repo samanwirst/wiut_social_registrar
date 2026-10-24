@@ -39,6 +39,31 @@ async def test_graph_calls_and_cleanup_share_one_background_thread(monkeypatch, 
 
 
 @pytest.mark.asyncio
+async def test_health_check_reaches_graph_after_sender_identity_was_cached(monkeypatch, tmp_path):
+    import requests
+
+    from registrar.errors import GraphError
+    from registrar.graph import GraphClient
+
+    settings = Settings(tmp_path / ".env")
+    session = Mock()
+    session.request.side_effect = [
+        Mock(status_code=200, json=lambda: {"userPrincipalName": "sender@example.test"}),
+        requests.ConnectionError("private-transport-details"),
+    ]
+    client = GraphClient(settings, auth=Mock(), session=session)
+    monkeypatch.setattr("app.services.registrar_service.GraphClient", Mock(return_value=client))
+    service = RegistrarService(settings)
+    try:
+        await service.check_connection()
+        with pytest.raises(GraphError, match="Could not connect"):
+            await service.check_connection()
+        assert session.request.call_count == 2
+    finally:
+        await service.close()
+
+
+@pytest.mark.asyncio
 async def test_invalid_ids_never_reach_graph(monkeypatch, tmp_path):
     client = Mock()
     monkeypatch.setattr("app.services.registrar_service.GraphClient", Mock(return_value=client))

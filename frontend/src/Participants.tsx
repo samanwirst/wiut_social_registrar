@@ -15,7 +15,7 @@ export function Participants({ eventId }: { eventId: string }) {
     api<MembersPage>(`/api/events/${encodeURIComponent(eventId)}/members?page=${page}`, { signal }), [eventId, page]);
   const { data, loading, error, reload } = useRemoteResource(load);
 
-  return <Section className="participants" header="Participants" footer="Additional answers expire automatically. A dash means no answer is available.">
+  return <Section className="studio-section participants" header="Participants" footer="Additional answers expire automatically. A dash means no answer is available.">
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} participants · 10 per page</Caption>
       <div className="actions">

@@ -36,6 +36,14 @@ class VerificationRepository:
             )
             return profile.student() if profile else None
 
+    async def email_status(self, user_id) -> str | None:
+        async with self.db.transaction() as session:
+            return await session.scalar(
+                select(VerificationChallenge.email_status).where(
+                    VerificationChallenge.telegram_user_id == user_id
+                )
+            )
+
     async def reserve_code(self, user_id, student: Student, code: str) -> str:
         now = self.clock()
         nonce = secrets.token_hex(16)

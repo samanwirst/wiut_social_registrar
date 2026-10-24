@@ -23,10 +23,14 @@ async def run(settings: BotSettings, *, check: bool = False) -> None:
             "Using Telegram %s environment.",
             "TEST" if settings.telegram_test_environment else "production",
         )
-        me = await app.check_connection()
-        logger.info("Telegram @%s, Outlook, and the database are ready.", me.username)
+        me = await app.check_connection(strict_outlook=check)
+        logger.info("Telegram @%s and the database are ready.", me.username)
         if not check:
             await app.run()
+    except Exception as error:
+        app.health.phase = "failed"
+        app.health.incident("fatal", error)
+        raise
     finally:
         await app.shutdown()
 
@@ -74,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         logger.error(
             "Could not access the configuration or network. Check file permissions and connectivity."
         )
+    except Exception as error:
+        logger.error("Unexpected application failure (%s)", type(error).__name__)
     return 2
 
 

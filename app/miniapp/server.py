@@ -6,6 +6,7 @@ import ssl
 
 from aiohttp import web
 
+from app.services.qr_designer import QrDesigner
 from registrar.config import ConfigurationError
 
 from .application import create_web_app
@@ -33,10 +34,11 @@ def mini_app_ssl_context(settings):
 
 
 class MiniAppServer:
-    def __init__(self, repository, bot, settings, *, static_dir=STATIC):
+    def __init__(self, repository, bot, settings, *, static_dir=STATIC, runtime_health=None):
         self.repository, self.bot, self.settings = repository, bot, settings
         self.static_dir = static_dir
         self.runner = None
+        self.runtime_health = runtime_health
 
     async def start(self):
         if not self.settings.mini_app_url:
@@ -51,7 +53,14 @@ class MiniAppServer:
         ssl_context = mini_app_ssl_context(self.settings)
         # Never log authentication headers or questionnaire answers.
         self.runner = web.AppRunner(
-            create_web_app(self.repository, self.bot, static_dir=self.static_dir), access_log=None
+            create_web_app(
+                self.repository,
+                self.bot,
+                static_dir=self.static_dir,
+                qr_designer=QrDesigner(self.settings.qr_images, health=self.runtime_health),
+                runtime_health=self.runtime_health,
+            ),
+            access_log=None,
         )
         try:
             await self.runner.setup()

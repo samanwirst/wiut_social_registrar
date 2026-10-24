@@ -24,6 +24,7 @@ RUN groupadd --gid 1000 app \
 COPY main.py cli.py config.py ./
 COPY app/ ./app/
 COPY registrar/ ./registrar/
+COPY monitoring/ ./monitoring/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
 COPY scripts/transfer_database.py ./scripts/transfer_database.py

@@ -16,7 +16,7 @@ from config import BotSettings
 from registrar.config import ConfigurationError
 
 NAME = "Social Registrar"
-ABOUT = "Students and event registration for WIUT. Verify once, then join events easily\n\nBy students, for students"
+ABOUT = "Students and event registration for WIUT. Verify once and join events easily\n\nBy students, for students\nLovely, WestDevs"
 DESCRIPTION = (
     "Join WIUT events in a few taps\n\n"
     "Register once with your student ID, then scan an event's QR code or open an invite link to join\n\n"

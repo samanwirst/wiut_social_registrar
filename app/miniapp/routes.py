@@ -5,7 +5,8 @@ from aiohttp import web
 
 from app.services.event_service import event_qr
 
-from .state import BOT, REPOSITORY, USER
+from .input import body, transparent_background
+from .state import BOT, QR_DESIGNER, REPOSITORY, USER
 
 
 def event_json(event):
@@ -21,16 +22,6 @@ def event_json(event):
         "form_locked": event.form_locked,
         "created_at": event.created_at.isoformat(),
     }
-
-
-async def body(request):
-    try:
-        data = await request.json()
-        if not isinstance(data, dict):
-            raise ValueError
-        return data
-    except (ValueError, UnicodeDecodeError):
-        raise web.HTTPBadRequest(text="Submit a JSON object.") from None
 
 
 def page_number(request):
@@ -63,7 +54,13 @@ async def list_events(request):
 async def get_event(request):
     event = await request.app[REPOSITORY].settings(request[USER], request.match_info["event_id"])
     link = await create_start_link(request.app[BOT], "event_" + event.id)
-    return web.json_response({**event_json(event), "link": link})
+    return web.json_response(
+        {
+            **event_json(event),
+            "link": link,
+            "qr_styling_enabled": request.app[QR_DESIGNER].enabled,
+        }
+    )
 
 
 async def update_event(request):
@@ -98,7 +95,7 @@ async def delete_answers(request):
 async def qr_code(request):
     event = await request.app[REPOSITORY].settings(request[USER], request.match_info["event_id"])
     link = await create_start_link(request.app[BOT], "event_" + event.id)
-    png = await asyncio.to_thread(event_qr, link, transparent=True)
+    png = await asyncio.to_thread(event_qr, link, transparent=transparent_background(request))
     return web.Response(
         body=png,
         content_type="image/png",

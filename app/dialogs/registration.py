@@ -56,14 +56,21 @@ async def education_prompt(message: Message) -> None:
 
 async def code_prompt(message, status):
     text = (
+        "Microsoft accepted your verification email\n"
         "Open the Outlook mailbox linked to your student ID and enter the 6-digit code here\n"
         "The code expires in 10 minutes\n\n"
         "/resend — request a new code"
     )
-    if status == "unknown":
+    if status == "failed":
+        text = (
+            "We couldn't send your verification email\n\n"
+            "Please wait 60 seconds and use /resend to try again"
+        )
+    elif status != "accepted":
         text = (
             "Microsoft did not confirm email submission\n"
-            "If the email arrives in Outlook, enter its 6-digit code here\n\n"
+            "We can't confirm that a code was sent\n"
+            "If a code arrives, you can enter it here\n\n"
             "Otherwise, wait 60 seconds and use /resend"
         )
     await message.answer(**card("Step 2 of 4", text).as_kwargs())
@@ -91,7 +98,9 @@ async def request_code(message, service, student_id):
         return
     except GraphError as error:
         logger.warning("Registration email unavailable (%s).", type(error).__name__)
-        await message.answer("Registration is temporarily unavailable. Please try again later")
+        await message.answer(
+            "Registration is temporarily unavailable\nWe couldn't send a verification email — please try again later"
+        )
         return
     await code_prompt(message, status)
 

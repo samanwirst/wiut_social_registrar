@@ -6,8 +6,8 @@ export function Pagination({ page, pages, onPage, disabled = false }: Page & { o
   return <nav className="pagination" aria-label="Pagination">
     <Caption>Page {page + 1} of {pages}</Caption>
     <div className="actions">
-      <Button type="button" size="s" mode="bezeled" disabled={disabled || page === 0} onClick={() => onPage(page - 1)}>← Previous</Button>
-      <Button type="button" size="s" mode="bezeled" disabled={disabled || page + 1 >= pages} onClick={() => onPage(page + 1)}>Next →</Button>
+      <Button type="button" size="s" mode="plain" disabled={disabled || page === 0} onClick={() => onPage(page - 1)}>Previous</Button>
+      <Button type="button" size="s" mode="plain" disabled={disabled || page + 1 >= pages} onClick={() => onPage(page + 1)}>Next</Button>
     </div>
   </nav>;
 }
