@@ -20,8 +20,8 @@ async def composition_reply(message, broadcast_repository):
     return {"broadcast_draft": draft} if draft is not None else False
 
 
-async def broadcast_message(message, broadcast_repository, broadcast_draft):
-    await receive_message(message, broadcast_repository, broadcast_draft)
+async def broadcast_message(message, broadcast_repository, broadcast_draft, event_repository):
+    await receive_message(message, broadcast_repository, broadcast_draft, event_repository)
 
 
 async def broadcast_action(callback, broadcast_repository):

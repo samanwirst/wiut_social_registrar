@@ -206,7 +206,10 @@ cancellation, claims, outcomes, and recipient retention. It locks the owner befo
 broadcast when both locks are needed; queue operations lock a broadcast before a recipient.
 PostgreSQL claims use SKIP LOCKED. SQLite retains BEGIN IMMEDIATE. No network call holds a lock.
 `app/dialogs/broadcasts.py` and `app/handlers/broadcast_handler.py` compose native Telegram
-ForceReply/copyMessage previews. They consume only replies to the active owner's saved prompt;
+ForceReply previews. `app/dialogs/broadcast_content.py` preserves native entities, rich blocks,
+and media while appending an italic attribution from the owner-checked form title. This is
+frozen into the preview before confirmation; delivery still copies the saved Telegram message.
+They consume only replies to the active owner's saved prompt;
 regular commands, verification, and questionnaire answers retain their handlers and state.
 Completed history is filtered before pagination and appears below the People table. Its
 `message_<uuid>` bot links check the requesting owner and completed state before copying

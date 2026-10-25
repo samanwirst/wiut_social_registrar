@@ -21,6 +21,7 @@ DESCRIPTION = (
     "WIUT opportunities in a few taps\n\n"
     "Register once with your student ID, then scan a QR code or open a link to join an event or submit an application\n"
     "Answer any questions right here in chat and you're all set\n\n"
+    "Organizing? Use /new_form with a name, then manage questions, tables and messages in your panel\n\n"
     "Tap Start to begin"
 )
 AVATAR = Path(__file__).parent / "assets" / "telegram-avatar.jpg"
