@@ -13,11 +13,21 @@ organizer can track decisions using columns such as Status, Score, or Interview 
 
 ## Edit the table
 
-The **People** tab shows ten rows per page. Tap a response or organizer value to edit it
-in the table. The editor follows the type: text, number, choice, checkbox, or date.
+The **People** tab shows ten rows per page. Text cells preview up to three lines; **Read more**
+opens the full answer with its question and student identity. The reading surface fills the
+available phone viewport and becomes a side panel in wide windows. Paragraphs and literal
+text are preserved and selectable, without opening the keyboard. **Edit** opens a spacious
+text field; **Save** returns to the full saved answer. The native Telegram Back button or
+close button returns to the same table page, scroll position, and selected audience.
+Unsaved answer changes require confirmation before closing; pending saves cannot be dismissed.
+Errors keep the typed draft in the editor. The surface follows viewport/keyboard resizing.
+
+Short responses and organizer values can be edited in the table. The editor follows the
+type: text, number, choice, checkbox, or date. Text editors also offer **Expand editor** to
+move a typed draft into the full editor. The existing 2,000-character text limit remains.
 The checkmark saves the cell; the cross closes it without a write. The compact controls
-sit beside the field, and text fields can be expanded for longer responses. Required
-questions and valid choice options remain enforced. Verified IDs, names, contacts, and education levels
+sit beside the field. Required questions and valid choice options remain enforced.
+Verified IDs, names, contacts, and education levels
 are read-only: organizers cannot overwrite a student's profile or verification.
 Choice response edits accept one option, matching the bot questionnaire. Older multi-option
 answers stay intact until the organizer explicitly replaces them with one choice.

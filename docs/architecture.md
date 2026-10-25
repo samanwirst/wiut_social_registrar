@@ -230,3 +230,12 @@ The Mini App uses labeled TelegramUI checkboxes, typed inline cell editors, opti
 explicit saves, and the native Telegram link handoff. It stores neither selections nor table data
 in localStorage. Official design and transport references are in
 [forms-and-messages.md](forms-and-messages.md).
+
+`useCellEditor` owns the shared revision-aware cell mutation and duplicate-save guard. Inline
+editors and `AnswerDetails` retain separate drafts while using that same transport behavior.
+`useTextOverflow` observes the three-line preview. One full-answer surface is owned by the
+mounted People view, preserving its audience, pagination, and table position. The workspace's
+existing BackButton handler checks the active detail callback before leaving the form; no
+second native back listener is registered. Nested dirty state joins the form's existing closing
+confirmation/unload protection. `useVisualViewport` subscribes only while the full editor is open
+and releases listeners on unmount. Full answers remain plain text and never enter browser storage.

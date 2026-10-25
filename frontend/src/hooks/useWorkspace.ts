@@ -21,6 +21,7 @@ export function useWorkspace(notify: Notify) {
   const [navigating, setNavigating] = useState(false);
   const navigationPending = useRef(false);
   const guard = useRef(() => true);
+  const detailBack = useRef<(() => void) | null>(null);
   const current = view ?? initial.data;
   const events = current && 'forms' in current ? current : null;
   const event = current && !('forms' in current) ? current : null;
@@ -40,6 +41,7 @@ export function useWorkspace(notify: Notify) {
   }, [notify]);
 
   const loadEvents = useCallback((page: number) => {
+    if (detailBack.current) { detailBack.current(); return; }
     if (!navigationPending.current && guard.current()) void navigate(`/api/forms?page=${page}`);
   }, [navigate]);
   const openEvent = useCallback((id: string) => {
@@ -49,7 +51,7 @@ export function useWorkspace(notify: Notify) {
   useTelegramBack(event !== null, goBack);
 
   return {
-    event, events, guard, listPage, loadEvents, openEvent, onSaved: setView,
+    event, events, guard, detailBack, listPage, loadEvents, openEvent, onSaved: setView,
     loading: initial.loading || navigating, error: initial.error, retry: initial.reload,
   };
 }

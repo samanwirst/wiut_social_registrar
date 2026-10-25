@@ -1,9 +1,11 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
 import { Button, Caption, Checkbox, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
 import { api, errorMessage } from './api';
 import { EditableCell } from './EditableCell';
 import { TableColumns } from './TableColumns';
 import { Broadcasts } from './Broadcasts';
+import { AnswerDetails } from './AnswerDetails';
 import { openTelegramChat } from './telegram';
 import { useRemoteResource } from './hooks/useRemoteResource';
 import { Pagination } from './Pagination';
@@ -13,11 +15,21 @@ function Contact({ value, prefix }: { value: string | null; prefix: string }) {
   return value ? <a href={prefix + value} target="_blank" rel="noopener noreferrer">{value}</a> : <>—</>;
 }
 
-export function Participants({ eventId }: { eventId: string }) {
+export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: string; detailBack: MutableRefObject<(() => void) | null>; onDirtyChange: (dirty: boolean) => void }) {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [preparing, setPreparing] = useState(false);
   const [composeError, setComposeError] = useState('');
+  const [detail, setDetail] = useState<{ memberId: number; fieldId: string; scope: 'answer' | 'column'; initialDraft?: string } | null>(null);
+  const detailOpener = useRef<HTMLTableCellElement | null>(null);
+  const closeDetail = useCallback(() => setDetail(null), []);
+  const openDetail = (memberId: number, fieldId: string, scope: 'answer' | 'column', initialDraft?: string) => {
+    detailOpener.current = document.activeElement?.closest<HTMLTableCellElement>('td') ?? null;
+    setDetail({ memberId, fieldId, scope, initialDraft });
+  };
+  useEffect(() => {
+    if (!detail) detailOpener.current?.querySelector<HTMLButtonElement>('.cell-value')?.focus({ preventScroll: true });
+  }, [detail]);
   const request = useRef({ id: crypto.randomUUID(), audience: '' });
   const pending = useRef(false);
   const load = useCallback((signal: AbortSignal) =>
@@ -45,8 +57,10 @@ export function Participants({ eventId }: { eventId: string }) {
     })),
   }) : previous);
   const allPage = Boolean(data?.members.length && data.members.every(member => selected.has(member.telegram_id)));
+  const detailMember = data?.members.find(member => member.telegram_id === detail?.memberId);
+  const detailField = detail && (detail.scope === 'answer' ? data?.questions : data?.columns)?.find(field => field.id === detail.fieldId);
 
-  return <><Section className="studio-section participants" header="People" footer="Tap an answer or custom value to edit it">
+  return <><Section className="studio-section participants" header="People" footer="Tap answers or custom values to view or edit">
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} people · 10 per page</Caption>
       <div className="actions">
@@ -77,12 +91,17 @@ export function Participants({ eventId }: { eventId: string }) {
               : <a href={`tg://user?id=${member.telegram_id}`}>Open profile</a>}</td>
             <td><Contact value={member.email} prefix="mailto:" /></td>
             <td><Contact value={member.phone_number} prefix="tel:" /></td><td>{member.education_level || '—'}</td>
-            {data.questions.map(q => <EditableCell key={q.id} formId={eventId} member={member} definition={q} scope="answer" columnsRevision={data.columns_revision} onSaved={cellSaved} />)}
-            {data.columns.map(c => <EditableCell key={c.id} formId={eventId} member={member} definition={c} scope="column" columnsRevision={data.columns_revision} onSaved={cellSaved} />)}
+            {data.questions.map(q => <EditableCell key={q.id} formId={eventId} member={member} definition={q} scope="answer" columnsRevision={data.columns_revision} onSaved={cellSaved}
+              onExpand={initialDraft => openDetail(member.telegram_id, q.id, 'answer', initialDraft)} />)}
+            {data.columns.map(c => <EditableCell key={c.id} formId={eventId} member={member} definition={c} scope="column" columnsRevision={data.columns_revision} onSaved={cellSaved}
+              onExpand={initialDraft => openDetail(member.telegram_id, c.id, 'column', initialDraft)} />)}
           </tr>)}</tbody></table>
       </div> : <Placeholder header="No responses yet" description="Share the form's QR code or link to invite people" />}
     {data ? <Pagination {...data} disabled={loading} onPage={setPage} /> : null}
   </Section>
     <Broadcasts formId={eventId} />
+    {detail && detailMember && detailField && data ? <AnswerDetails key={`${detail.memberId}:${detail.fieldId}:${detail.scope}`} formId={eventId}
+      member={detailMember} definition={detailField} scope={detail.scope} columnsRevision={data.columns_revision} onSaved={cellSaved}
+      initialDraft={detail.initialDraft} back={detailBack} onClose={closeDetail} onDirtyChange={onDirtyChange} /> : null}
   </>;
 }
