@@ -35,10 +35,10 @@ async def choose_education(
     if pending_titles:
         pending_forms = await event_repository.pending_forms(callback.from_user.id)
         text += Text(
-            "\n\nSaved events without extra questions have been registered. "
-            "Complete the event questions below to finish the remaining registrations\n"
+            "\n\nForms without extra questions are complete\n"
+            "Answer the remaining form questions below to finish\n"
             if pending_forms
-            else "\n\nYour saved events have been registered\n"
+            else "\n\nYour saved forms are complete\n"
         ) + Text("\n".join(pending_titles))
     await callback.message.answer(
         **text.as_kwargs(), reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel)

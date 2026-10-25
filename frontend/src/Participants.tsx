@@ -46,7 +46,7 @@ export function Participants({ eventId }: { eventId: string }) {
   }) : previous);
   const allPage = Boolean(data?.members.length && data.members.every(member => selected.has(member.telegram_id)));
 
-  return <><Section className="studio-section participants" header="People" footer="Tap a response or organizer value to edit it. Verified contact details are read-only. Additional data expires automatically.">
+  return <><Section className="studio-section participants" header="People" footer="Tap an answer or custom value to edit it">
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} people · 10 per page</Caption>
       <div className="actions">

@@ -46,6 +46,6 @@ export function EditableCell({ formId, member, definition, scope, columnsRevisio
         <IconButton type="button" className="cell-action cell-dismiss" size="s" mode="plain" aria-label="Discard" title="Discard" disabled={saving} onClick={() => setEditing(false)}><CloseIcon /></IconButton>
       </div>
       {error ? <Caption role="alert" className="danger cell-error">{error}</Caption> : null}
-    </form> : <button type="button" className="cell-value" disabled={expired} aria-label={`Edit ${label}`} title={expired ? 'The retention window has expired' : 'Edit this cell'} onClick={() => { setDraft(value); setError(''); setEditing(true); }}>{display}</button>}
+    </form> : <button type="button" className="cell-value" disabled={expired} aria-label={`Edit ${label}`} title={expired ? 'Editing is no longer available' : 'Edit this cell'} onClick={() => { setDraft(value); setError(''); setEditing(true); }}>{display}</button>}
   </td>;
 }

@@ -19,7 +19,7 @@ export function Questions({ questions, locked, disabled, onChange }: {
   };
   return <>
     <p className="notice">{locked
-      ? 'Questions are locked after the first submission. Event details remain editable.'
+      ? 'Questions are locked after the first submission. Form details remain editable.'
       : 'Students answer these questions in the bot chat. Without questions, QR scans register verified students immediately.'}</p>
     <List className="section-list editor-fields">
       {questions.map((question, index) => <Section className="studio-section" key={question.id} header={`Question ${index + 1}${locked ? ' · Locked' : ''}`}>

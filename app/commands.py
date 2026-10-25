@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 COMMANDS = {
     "start": "Start or resume registration",
-    "new_form": "Create an event or recruitment form",
-    "panel": "Forms, people and messages",
+    "new_form": "Create a form",
+    "panel": "Forms and responses",
     "resend": "Resend email code",
     "me": "View your own student profile",
     "help": "Help and commands",

@@ -40,5 +40,9 @@ def student_profile(
 
 
 def event_confirmation(event, *, already=False) -> Text:
-    prefix = "You are already registered for: " if already else "You are registered for: "
+    prefix = (
+        "Your response has already been submitted for: "
+        if already
+        else "Your response has been submitted for: "
+    )
     return Text(prefix, Bold(event.title))

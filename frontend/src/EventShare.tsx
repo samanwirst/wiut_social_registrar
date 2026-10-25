@@ -26,7 +26,7 @@ export function EventShare({ event, designer, notify }: {
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(event.link); notify('Form link copied'); }
-    catch { notify('Could not copy. Select the event link below the QR code.', true); }
+    catch { notify('Could not copy the link. Select the form link below the QR code', true); }
   };
   const download = () => {
     if (!qr) return;
@@ -75,7 +75,7 @@ export function EventShare({ event, designer, notify }: {
             <li aria-current={designer.design?.status === 'verifying' ? 'step' : undefined} className={designer.design?.status === 'verifying' ? 'current' : ''}>Check QR</li>
           </ol>
         </div> : <>
-          <div className="qr-wrap">{qr ? <img id="event-qr" src={qr} alt="Scan to register for this event" width={300} height={300} />
+          <div className="qr-wrap">{qr ? <img id="event-qr" src={qr} alt="Scan to open this form" width={300} height={300} />
             : error ? <Button type="button" mode="bezeled" onClick={reload}>Retry preview</Button>
               : <div className="qr-preview-loading" role="status"><Spinner size="m" /><Caption>Preparing your PNG</Caption></div>}</div>
           {error ? <Caption className="danger" role="alert">{error}</Caption> : null}
@@ -93,7 +93,7 @@ export function EventShare({ event, designer, notify }: {
           ? <Button type="button" mode="plain" onClick={() => { void designer.reset(); }}>Use standard QR</Button> : null}
       </div>
       <a href={event.link} className="event-link" target="_blank" rel="noopener noreferrer">{event.link}</a>
-      <Button type="button" stretched mode="bezeled" onClick={copy}>Copy event link</Button>
+      <Button type="button" stretched mode="bezeled" onClick={copy}>Copy form link</Button>
     </div>
   </Section>;
 }

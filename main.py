@@ -37,7 +37,7 @@ async def run(settings: BotSettings, *, check: bool = False) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Telegram student registration and profile lookup."
+        description="Telegram student verification, forms and organizer tools"
     )
     parser.add_argument(
         "--env-file", type=Path, help="Path to .env (defaults to the project directory)."

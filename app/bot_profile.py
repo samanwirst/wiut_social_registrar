@@ -19,8 +19,9 @@ NAME = "Social Registrar"
 ABOUT = "WIUT events, advisor applications and more\nVerify once, apply easily\n\nBy students, for students\nLovely, WestDevs"
 DESCRIPTION = (
     "WIUT opportunities in a few taps\n\n"
-    "Register once with your student ID, then open a form link or QR code for events, advisor applications, and more\n\n"
-    "Organizing? Use /new_form with a name, then manage questions, tables and messages in your panel\n\n"
+    "Register once with your student ID, then scan a QR code or open a link to join an event or submit an application\n"
+    "Answer any questions right here in chat and you're all set\n\n"
+    "Tap Start to begin"
 )
 AVATAR = Path(__file__).parent / "assets" / "telegram-avatar.jpg"
 DESCRIPTION_PICTURE = Path(__file__).parent / "assets" / "telegram-description.png"

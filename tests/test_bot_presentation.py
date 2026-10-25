@@ -16,7 +16,6 @@ def test_profile_copy_fits_telegram_limits_and_avatar_is_a_real_jpeg():
     assert 1 <= len(ABOUT) <= 120
     assert 1 <= len(DESCRIPTION) <= 512
     assert AVATAR.read_bytes().startswith(b"\xff\xd8\xff")
-    assert "/new_form" in DESCRIPTION
 
 
 def test_profile_entities_keep_special_characters_and_copyable_student_id():

@@ -24,7 +24,7 @@ export function TableColumns({ formId, columns, revision, onChanged }: {
   };
   return <div className="table-columns">
     <Button type="button" size="s" mode="plain" aria-expanded={open} onClick={() => setOpen(value => !value)}>Columns</Button>
-    {open ? <Section header="Organizer columns" footer="These values belong only to this form and follow its answer retention period. Verified student details are read-only.">
+    {open ? <Section header="Organizer columns">
       <div className="field-stack">
         {columns.map(column => <div className="column-row" key={column.id}><span>{column.label}</span>
           <Button type="button" size="s" mode="plain" disabled={saving} onClick={() => { setEditing(structuredClone(column)); setError(''); }}>Edit</Button>

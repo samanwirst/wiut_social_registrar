@@ -48,7 +48,7 @@ async def education_prompt(message: Message) -> None:
     await message.answer(
         **card(
             "Step 4 of 4",
-            "Select your current education level to finish registration",
+            "Select your current education level",
         ).as_kwargs(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons[:2], buttons[2:]]),
     )
@@ -56,8 +56,7 @@ async def education_prompt(message: Message) -> None:
 
 async def code_prompt(message, status):
     text = (
-        "Microsoft accepted your verification email\n"
-        "Open the Outlook mailbox linked to your student ID and enter the 6-digit code here\n"
+        "Enter the 6-digit code from your university email\n"
         "The code expires in 10 minutes\n\n"
         "/resend — request a new code"
     )
@@ -68,9 +67,8 @@ async def code_prompt(message, status):
         )
     elif status != "accepted":
         text = (
-            "Microsoft did not confirm email submission\n"
-            "We can't confirm that a code was sent\n"
-            "If a code arrives, you can enter it here\n\n"
+            "We couldn't confirm that your code was sent\n"
+            "If a code arrives, enter it here\n\n"
             "Otherwise, wait 60 seconds and use /resend"
         )
     await message.answer(**card("Step 2 of 4", text).as_kwargs())
@@ -79,8 +77,7 @@ async def code_prompt(message, status):
 async def welcome(message: Message) -> None:
     content = Text(
         Bold("Welcome to Social Registrar"),
-        "\n",
-        "Register once for WIUT events, advisor applications, and more\n\n",
+        "\n\n",
         Bold("Step 1 of 4"),
         "\n",
         "Send your own student ID as text, including any leading zeroes\n",
