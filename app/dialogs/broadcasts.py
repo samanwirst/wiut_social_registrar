@@ -4,6 +4,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, ReplyParameters
 
 from app.chat_formatting import card, error_text, recipient_count
+from app.dialogs.broadcast_content import send_preview
 from app.event_errors import EventError
 
 
@@ -101,7 +102,7 @@ async def show_sent_message(message, repository, draft_id):
         await message.answer("Telegram couldn't open this message — it may have been deleted")
 
 
-async def receive_message(message, repository, draft):
+async def receive_message(message, repository, draft, event_repository):
     kind = next(
         (
             name
@@ -116,13 +117,10 @@ async def receive_message(message, repository, draft):
         )
         return
     try:
-        # Copy into the bot's own preview first. The user's original can be deleted
-        # afterwards without changing the confirmed content or its native formatting.
-        copied = await message.bot.copy_message(
-            chat_id=message.from_user.id,
-            from_chat_id=message.chat.id,
-            message_id=message.message_id,
-        )
+        event = await event_repository.settings(message.from_user.id, draft["event_id"])
+        # Freeze both native content and attribution in the bot-owned preview before
+        # confirmation. Later edits to the original or form name cannot change it.
+        copied = await send_preview(message, event.title, kind)
         preview = await repository.preview(
             message.from_user.id,
             draft["id"],

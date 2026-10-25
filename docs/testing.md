@@ -104,8 +104,10 @@ departments, owner-only cell/column mutations, conflict rejection, immutable ver
 expiry after cleanup/retention extension, migration of existing profiles/answers, audience and
 confirmation idempotency, flood-wait budgets, interruption recovery, cancellation, and recipient
 retention. `test_forms_api.py` covers signed identity, other owners, tampering, and transport.
-`test_broadcast_chat.py` feeds real aiogram updates with synthetic plain/rich content and mocks
-all Bot API calls: preview, confirmation, and worker copies must use the exact saved message.
+`test_broadcast_chat.py` feeds real aiogram updates with synthetic text, rich content, photos,
+and documents and mocks all Bot API calls. It checks italic form attribution, UTF-16 entities,
+text/caption limits, nested rich media, and exact saved copies through confirmation and delivery,
+including when the form is renamed after preparing the preview.
 Browser QA selects people on two pages, creates an audience, checks the native compose URL,
 edits number/choice cells, adds columns, changes the department, and opens a Finished link
 under People while drafts remain hidden. Repository/API checks cover filtered pagination,

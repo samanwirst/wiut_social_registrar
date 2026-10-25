@@ -44,10 +44,13 @@ Attendance and the verified student profile remain permanent.
 3. Reply to **Write your message** using Telegram's own formatting: bold, italic, links,
    spoilers, rich messages, or one photo/document with a caption. Albums and unrelated
    messages are not treated as broadcast content.
-4. Review the exact copied preview and audience count. Choose **Send to …** or **Edit message**.
+4. Review the exact preview and audience count. The bot appends an italic *By Form name*
+   attribution after the message (or its caption), using the form's name when the preview
+   is prepared. Leave room for this footer within Telegram's text/caption limits.
+   Choose **Send to …** or **Edit message**.
    Only the owner can confirm; older buttons cannot submit a replacement.
-   The bot's copied preview is the source, so editing the original cannot change a
-   confirmed message.
+   The bot's saved preview is the source, so editing the original or renaming the form
+   cannot change a confirmed message.
 5. The **Messages** section at the bottom of **People** shows only **Finished** broadcasts,
    with delivery counts. Drafts and in-progress messages are hidden. Completed messages
    appear automatically while a queue is active, or after **Refresh**.
@@ -77,8 +80,10 @@ Telegram recommends responsive, accessible, theme-aware interfaces and familiar 
 it does not prescribe an editable-grid API. The table uses TelegramUI controls, theme/safe
 area tokens, keyboard-accessible cells, and contained horizontal scrolling on narrow screens.
 The handoff uses `openTelegramLink` and `ForceReply`, with signed Mini App authentication.
-`copyMessage` preserves native formatting/media without converting user text to HTML or
-Markdown or attaching a link to the original message.
+Preview preparation preserves text/caption entities and rich blocks, reusing embedded
+media by Telegram file ID. The attribution is a literal italic entity or rich paragraph;
+form names are never parsed as HTML or Markdown. `copyMessage` delivers the saved preview
+without attaching a link to the original message.
 
 One async worker copies confirmed previews at at most ten recipients per second and
 spaces messages to one chat by at least 1.1 seconds. Paid broadcasts are disabled.
