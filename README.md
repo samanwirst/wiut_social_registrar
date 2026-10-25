@@ -2,7 +2,7 @@
 
 Designed and developed by [Mukhammadiev Samandar](https://t.me/samanwirst), [WestDevs](https://t.me/westdevs)
 
-A Telegram bot for student and event registration. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
+A Telegram bot for verified student forms: events, advisor applications, and other WIUT opportunities. On first use, send your student ID, open Outlook, and enter the six-digit verification code from the email. Then share your own phone number using Telegram's contact button and select your current education level (CIFS, Level 4, Level 5, or Level 6) using inline buttons to complete registration and see your profile. The bot uses aiogram 3, Microsoft Graph v1.0, MSAL, and async SQLAlchemy.
 
 Registration is open to everyone in private chats. Verification emails use a fixed template; Telegram users cannot send arbitrary emails. Registered users view only their own linked profile with `/me`; the bot does not offer student-directory searches. The Graph core retains its local console lookup and email tools.
 
@@ -121,8 +121,8 @@ contact, and education level. Messages use ordinary Telegram entities for headin
 copyable IDs; student names and event text stay literal.
 
 The native **Menu** button adapts to the user. Before registration it offers `/start`,
-`/resend`, `/help` and `/info`. Registered students see `/new_event`, `/me`, `/help` and
-`/info`; `/panel` appears after `/new_event` only for event organizers when the panel is
+`/resend`, `/help` and `/info`. Registered students see `/new_form`, `/me`, `/help` and
+`/info`; `/panel` appears after creating a form only for its organizers when the panel is
 configured. `/me` sits immediately before `/help`, and `/info` is last. Role changes update the menu
 immediately. Updates are cached with bounded memory, and a failed menu update does not
 block registration. Groups do not inherit the private-chat command list.
@@ -160,9 +160,21 @@ updates the profile avatar only. The preview command also prints the cover path
 and these setup instructions. Generation details are in
 [`app/assets/README.md`](app/assets/README.md).
 
-### Events and QR registration
+### Forms and QR registration
 
-Registered students create events using `/new_event Welcome Night` (name up to 200 characters). `/new_event` without a name creates an event named "New Event". Event creation is available only through this command; there is no New Event button or plain-text shortcut. The bot saves the event and returns a short text confirmation with **Manage event** when the Mini App is configured. The creation message contains no QR image, registration link, or registration button. Open the **QR** tab in the organizer panel to download the QR code or copy the registration link. Each event has a random UUID; the bot username is discovered through Telegram rather than configured in the source.
+Registered students create forms with `/new_form SU Advisors` (name up to 200 characters).
+The bot saves the form and opens **Manage form**. In Overview, edit its details and optional
+department. The same form can serve an event, an advisor call, or another application without
+choosing a type. `/new_event` remains an alias and old QR invitations remain valid.
+Open the **QR** tab to download a PNG or copy
+the invite link; no QR or registration button is posted in the creation message.
+
+The **People** table supports editing responses and adding typed organizer columns while keeping
+verified profile details read-only. Select people across its ten-row pages to prepare a message,
+format it in Telegram, preview it, and explicitly confirm the broadcast. The **Messages** section
+at the bottom of **People** shows only **Finished** broadcasts; tap one to view its sent copy
+in the bot. See [forms-and-messages.md](docs/forms-and-messages.md)
+for the full workflow, data retention, access rules, and Telegram's official design references.
 
 Scan the QR with an ordinary phone camera and open the HTTPS link. It takes the student into the bot using a [Telegram deep link](https://core.telegram.org/bots/features#deep-linking), such as `https://t.me/your_bot?start=event_<uuid>`. Telegram may ask the student to press **Start** before delivering the link to the bot.
 
@@ -175,16 +187,16 @@ Creating events is available to all registered users in private chats. Event lin
 
 ### Organizer Mini App and event questionnaires
 
-Create an event with `/new_event Event name`, then open **Manage event** below the confirmation or use `/panel`. Event creation remains a bot command. The Mini App configures existing events and displays their participant tables.
+Create a form with `/new_form Form name`, then open **Manage form** below the confirmation or use `/panel`. Creation remains a bot command. The Mini App configures existing forms and displays their participant tables.
 
-The Mini App becomes available only after a student **successfully creates their first event with `/new_event`**. Ordinary students do not see Mini App buttons or its help entry; `/panel` asks them to create an event first. Attending someone else's event does not unlock the panel. This permission is checked on every API request as well, so an old or shared Mini App link cannot bypass it. Organizer status is derived from saved event ownership and survives bot restarts.
+The Mini App becomes available only after a student **successfully creates their first form with `/new_form` or `/new_event`**. Ordinary students do not see Mini App buttons or its help entry; `/panel` asks them to create a form first. Joining someone else's form does not unlock the panel. This permission is checked on every API request as well, so an old or shared Mini App link cannot bypass it. Organizer status is derived from saved ownership and survives bot restarts.
 
 The organizer workspace provides:
 
-- Event name and description, and an open/closed registration switch.
+- Form name, department, description, and an open/closed registration switch.
 - A dedicated **QR** tab with a copyable registration link and downloadable **PNG**. Choose a transparent or opaque background, or describe a custom AI design. QR images load only when this tab is opened; the other pages focus on editing and participants.
 - Up to **20 questions**, with **Text response (TR)** and **Multiple choice (MC)** answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
-- A participant table with **10 rows per page**, contact details, Level, and one column per question. **Refresh** fetches current answers. Answers expire automatically according to the event's retention period.
+- A People table with **10 rows per page**, contact details, Level, editable response cells, organizer columns, and multi-page audience selection. **Refresh** fetches current answers. Answers expire automatically according to the event's retention period.
 - Automatic expiration of extra answers after **30 days by default**. Retention is managed by the server.
 
 Set up questions **before sharing the QR code**. Events start open and have no questions, preserving immediate enrollment until questions are added. Students already enrolled are not asked to register again; their extra answer cells show a dash.

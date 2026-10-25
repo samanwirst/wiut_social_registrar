@@ -137,6 +137,11 @@ class Event(Base):
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     form_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     form_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Retained for the applied 0007 schema; all forms use the same workflow.
+    kind: Mapped[str] = mapped_column(String(16), default="event", server_default="event")
+    department: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    table_columns: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    columns_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class EventQrDesign(Base):
@@ -165,6 +170,57 @@ class EventRegistration(Base):
     telegram_user_id: Mapped[int] = mapped_column(ForeignKey("telegram_users.id"), index=True)
     outlook_profile_id: Mapped[int] = mapped_column(ForeignKey("outlook_profiles.id"), index=True)
     registered_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    table_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    table_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class EventTableValues(Base):
+    """Temporary organizer columns; never overwrite verified student profiles."""
+
+    __tablename__ = "event_table_values"
+    registration_id: Mapped[int] = mapped_column(
+        ForeignKey("event_registrations.id", ondelete="CASCADE"), primary_key=True
+    )
+    values: Mapped[dict] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+
+
+class Broadcast(Base):
+    """A confirmed audience and Telegram-owned preview; message content stays in Telegram."""
+
+    __tablename__ = "broadcasts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("telegram_users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    prompt_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    source_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    original_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    content_kind: Mapped[str | None] = mapped_column(String(24))
+    total: Mapped[int] = mapped_column(Integer)
+    counts: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    queued_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class BroadcastRecipient(Base):
+    __tablename__ = "broadcast_recipients"
+    broadcast_id: Mapped[str] = mapped_column(
+        ForeignKey("broadcasts.id", ondelete="CASCADE"), primary_key=True
+    )
+    telegram_user_id: Mapped[int] = mapped_column(
+        ForeignKey("telegram_users.id"), primary_key=True, autoincrement=False
+    )
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    message_id: Mapped[int | None] = mapped_column(BigInteger)
+    error_code: Mapped[str | None] = mapped_column(String(32))
 
 
 class PendingEventRegistration(Base):

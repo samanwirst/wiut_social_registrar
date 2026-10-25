@@ -12,16 +12,16 @@ async def cmd_panel(message: Message, verified_student, mini_app_url, event_repo
         await message.answer("Complete registration first. Use /start to continue")
     elif not await event_repository.is_organizer(message.from_user.id):
         await message.answer(
-            "Create your first event with /new_event Event name to unlock the event panel"
+            "Create your first form with /new_form Form name to unlock the organizer panel"
         )
     elif not mini_app_url:
-        await message.answer("The event panel is not available yet. Please try again later")
+        await message.answer("The organizer panel is not available yet. Please try again later")
     else:
         await message.answer(
             **card(
-                "Event panel",
-                "Manage your events, registration questions and participants\n"
-                "Choose an event in the panel to get started",
+                "Organizer panel",
+                "Manage forms, questions, tables and messages\n"
+                "Choose a form in the panel to get started",
             ).as_kwargs(),
             reply_markup=main_menu(mini_app_url, can_open_panel=True),
         )
@@ -35,7 +35,7 @@ async def retired_event_menu(
         mini_app_url, can_open_panel=can_open_panel and verified_student is not None
     )
     await callback.answer(
-        "Open Event panel to view your events and participants"
+        "Open the organizer panel to view your forms and people"
         if keyboard
         else "Use /panel to open the organizer panel",
         show_alert=keyboard is None,

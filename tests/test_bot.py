@@ -472,7 +472,7 @@ async def test_repeated_contact_does_not_repeat_registration(app):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "command,title", [("/new_event", "New Event"), ("/new_event Welcome Night", "Welcome Night")]
+    "command,title", [("/new_event", "New Form"), ("/new_event Welcome Night", "Welcome Night")]
 )
 @pytest.mark.parametrize("mini_app_url", ["", "https://events.example.test"])
 async def test_new_event_sends_confirmation_without_registration_media(
@@ -483,7 +483,7 @@ async def test_new_event_sends_confirmation_without_registration_media(
     replies = await send(app, command)
     assert len(replies) == 1
     reply = replies[0]
-    assert title in reply.text and "Event created" in reply.text
+    assert title in reply.text and "Form created" in reply.text
     assert "https://t.me/" not in reply.text
     assert methods(app, SendPhoto) == []
     async with app.database.transaction() as session:
@@ -491,7 +491,7 @@ async def test_new_event_sends_confirmation_without_registration_media(
         assert event.title == title and event.creator_telegram_user_id == 100
     if mini_app_url:
         buttons = [button for row in reply.reply_markup.inline_keyboard for button in row]
-        assert len(buttons) == 1 and buttons[0].text == "Manage event"
+        assert len(buttons) == 1 and buttons[0].text == "Manage form"
         assert buttons[0].web_app.url == f"{mini_app_url}/?event={event.id}"
         assert buttons[0].url is None
     else:
@@ -542,7 +542,7 @@ async def test_second_event_link_replaces_first_during_student_registration_with
     event = await app.event_repository.create(100, "Freshers Welcome")
     second = await app.event_repository.create(100, "Second Event")
     replies = await send(app, f"/start event_{event.id}", user_id=200)
-    assert "Event saved: Freshers Welcome" in replies[0].text
+    assert "Form saved: Freshers Welcome" in replies[0].text
     assert "own student ID" in replies[-1].text
     app.registrar_service.find_student.return_value = Student(
         "00000002", "Second Student", "second@example.test", account="00000002@example.test"
@@ -843,7 +843,7 @@ async def test_panel_and_event_management_buttons_open_mini_app_only_for_organiz
     replies = await register(app)
     assert replies[-1].reply_markup is None
     replies = await send(app, "/panel")
-    assert "/new_event" in replies[-1].text and replies[-1].reply_markup is None
+    assert "/new_form" in replies[-1].text and replies[-1].reply_markup is None
     replies = await send(app, "/start")
     assert len(replies) == 1
     assert isinstance(replies[0].reply_markup, ReplyKeyboardRemove)
@@ -851,7 +851,7 @@ async def test_panel_and_event_management_buttons_open_mini_app_only_for_organiz
     assert "/panel" not in replies[-1].text
     replies = await send(app, "/new_event Welcome")
     button = replies[-1].reply_markup.inline_keyboard[-1][0]
-    assert button.text == "Manage event" and button.web_app.url.startswith(
+    assert button.text == "Manage form" and button.web_app.url.startswith(
         app.dp["mini_app_url"] + "/?event="
     )
     replies = await send(app, "/panel")
@@ -906,7 +906,7 @@ async def test_joining_an_event_does_not_unlock_the_mini_app(app):
     )
     assert replies[-1].reply_markup is None
     replies = await send(app, "/panel", user_id=200)
-    assert "/new_event" in replies[-1].text and replies[-1].reply_markup is None
+    assert "/new_form" in replies[-1].text and replies[-1].reply_markup is None
 
 
 @pytest.mark.asyncio
@@ -922,7 +922,9 @@ async def test_retired_event_buttons_replace_old_keyboard_with_panel_only(app, d
     app.registrar_service.reset_mock()
     await callback(app, data, photo=photo)
     keyboard = methods(app, EditMessageReplyMarkup)[-1].reply_markup
-    assert [button.text for row in keyboard.inline_keyboard for button in row] == ["Event panel"]
+    assert [button.text for row in keyboard.inline_keyboard for button in row] == [
+        "Organizer panel"
+    ]
     assert keyboard.inline_keyboard[0][0].web_app.url == app.dp["mini_app_url"]
     assert methods(app, SendRichMessage) == [] and methods(app, EditMessageText) == []
     app.event_repository.members.assert_not_called()
@@ -962,7 +964,7 @@ async def test_native_command_menu_follows_registration_and_event_creation(app):
     await register(app)
     current = methods(app, SetMyCommands)[-1]
     names = [item.command for item in current.commands]
-    assert {"new_event", "me"} <= set(names) and "resend" not in names and "panel" not in names
+    assert {"new_form", "me"} <= set(names) and "resend" not in names and "panel" not in names
     app.dp["mini_app_url"] = "https://events.example.test"
     await send(app, "/new_event Welcome")
     assert "panel" in [item.command for item in methods(app, SetMyCommands)[-1].commands]

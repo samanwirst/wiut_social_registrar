@@ -13,6 +13,10 @@ def card(title: str, body: str | Text) -> Text:
     return Text(Bold(title), "\n\n", body)
 
 
+def recipient_count(count: int) -> str:
+    return f"{count} recipient" if count == 1 else f"{count} recipients"
+
+
 def student_profile(
     student: Student, *, title="Your verified profile", education_level=None
 ) -> Text:

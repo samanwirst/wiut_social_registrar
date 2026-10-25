@@ -25,6 +25,7 @@ from aiohttp import web
 from PIL import Image, ImageDraw
 from playwright.async_api import async_playwright
 
+from app.broadcasts import BroadcastRepository
 from app.db import Database
 from app.event_repository import EventRepository
 from app.miniapp import create_web_app
@@ -102,7 +103,7 @@ async def main():
         q = {
             "id": str(uuid4()),
             "label": "Which track are you joining?",
-            "type": "single_choice",
+            "type": "multiple_choice",
             "required": True,
             "options": ["Product & design", "Software engineering"],
         }
@@ -120,8 +121,17 @@ async def main():
         )
         for user_id in range(1000, 1012):
             await events.submit_form(
-                user_id, career.id, {q["id"]: q["options"][user_id % 2]}, career.revision
+                user_id, career.id, {q["id"]: [q["options"][user_id % 2]]}, career.revision
             )
+        broadcasts = BroadcastRepository(db)
+        sent_message = await broadcasts.create(100, career.id, [1000, 1010], str(uuid4()))
+        await broadcasts.compose(100, sent_message["id"], 500)
+        ready = await broadcasts.preview(
+            100, sent_message["id"], 500, 600, "text", original_message_id=400
+        )
+        await broadcasts.queue(100, sent_message["id"], ready["revision"])
+        while claim := await broadcasts.claim():
+            await broadcasts.finish(claim, "sent", message_id=700)
         bot = SimpleNamespace(
             token=TOKEN, me=AsyncMock(return_value=SimpleNamespace(username="example_bot"))
         )
@@ -154,6 +164,8 @@ async def main():
             setHeaderColor(color){window.testHeaderColor=color;},
             setBackgroundColor(color){window.testBackgroundColor=color;},
             setBottomBarColor(color){window.testBottomBarColor=color;},
+            openTelegramLink(url){window.testComposeLink=url;},
+            close(){window.testClosed=true;},
             onEvent(name, callback) {
                 if (!listeners.has(name)) listeners.set(name, new Set());
                 listeners.get(name).add(callback);
@@ -196,7 +208,7 @@ async def main():
                     ),
                 )
                 await page.goto(f"http://127.0.0.1:{port}/")
-                await page.get_by_role("heading", name="Your events").wait_for()
+                await page.get_by_role("heading", name="Your forms").wait_for()
                 await page.screenshot(path=str(OUT / "desktop-events.png"), full_page=True)
                 # Reproduce Telegram Desktop's blue night palette, rather than only
                 # toggling the library's generic light/dark defaults.
@@ -228,7 +240,7 @@ async def main():
                 assert await page.evaluate(
                     "document.documentElement.scrollWidth <= window.innerWidth"
                 )
-                assert (await page.get_by_role("heading", name="Your events").bounding_box())[
+                assert (await page.get_by_role("heading", name="Your forms").bounding_box())[
                     "y"
                 ] < 45
                 await page.screenshot(path=str(OUT / "telegram-desktop-night.png"), full_page=True)
@@ -628,23 +640,107 @@ async def main():
                 assert await page.locator("#event-qr").count() == 0
                 assert await page.get_by_label("Option 1", exact=True).input_value() == "Morning"
                 assert await page.get_by_label("Option 2", exact=True).input_value() == "Evening"
-                await page.get_by_role("button", name="All events").click()
+                await page.get_by_role("button", name="All forms").click()
                 await page.get_by_role("button", name="Career Lab 2026").click()
-                await page.get_by_role("tab", name="Participants", exact=True).click()
-                await page.get_by_text("12 participants · 10 per page", exact=True).wait_for()
+                await page.get_by_role("tab", name="People", exact=True).click()
+                await page.get_by_text("12 people · 10 per page", exact=True).wait_for()
                 assert (
                     await page.get_by_role("button", name="Delete answers", exact=True).count() == 0
                 )
                 assert await page.locator("#event-qr").count() == 0
                 assert await page.locator("tbody tr").count() == 10
+                await page.get_by_label("Select Student 1000", exact=True).locator("..").click()
+                assert await page.get_by_label("Select Student 1000", exact=True).is_checked()
                 await page.get_by_role("button", name="Next", exact=True).click()
                 await page.get_by_text("Page 2 of 2", exact=True).wait_for()
                 assert await page.locator("tbody tr").count() == 2
+                await page.get_by_label("Select Student 1010", exact=True).locator("..").click()
+                assert await page.get_by_label("Select Student 1010", exact=True).is_checked()
+                await page.get_by_text("2 selected across pages", exact=True).wait_for()
+                await page.get_by_role("button", name="Prepare message", exact=True).click()
+                await page.wait_for_function("() => window.testComposeLink && window.testClosed")
+                assert (
+                    await page.get_by_role("button", name="Write in Telegram", exact=True).count()
+                    == 0
+                )
+                assert (await page.evaluate("window.testComposeLink")).startswith(
+                    "https://t.me/example_bot?start=compose_"
+                )
+                assert await page.evaluate("window.testClosed")
+                await page.get_by_role("button", name="Columns", exact=True).click()
+                await page.get_by_role("button", name="Add column", exact=True).click()
+                await page.get_by_label("Column name", exact=True).fill("Score")
+                await page.get_by_label("Value type", exact=True).select_option("number")
+                await page.get_by_role("button", name="Save column", exact=True).click()
+                await page.get_by_role("columnheader", name="Score", exact=True).wait_for()
+                await page.get_by_label("Edit Score for Student 1010", exact=True).click()
+                cell = page.get_by_role("form", name="Edit Score for Student 1010", exact=True)
+                await cell.get_by_role("spinbutton").fill("8")
+                await page.set_viewport_size({"width": 390, "height": 844})
+                await cell.scroll_into_view_if_needed()
+                await page.screenshot(
+                    path=str(OUT / "mobile-number-cell-editor.png"), full_page=True
+                )
+                await page.set_viewport_size({"width": 1280, "height": 1000})
+                await cell.get_by_role("button", name="Save", exact=True).click()
+                await (
+                    page.get_by_label("Edit Score for Student 1010", exact=True)
+                    .get_by_text("8", exact=True)
+                    .wait_for()
+                )
+                response_cell = page.get_by_label(
+                    "Edit Which track are you joining? for Student 1010", exact=True
+                )
+                await response_cell.click()
+                cell = page.get_by_role(
+                    "form", name="Edit Which track are you joining? for Student 1010", exact=True
+                )
+                assert await cell.get_by_role("checkbox").count() == 0
+                await cell.get_by_role("combobox").select_option("Software engineering")
+                await page.set_viewport_size({"width": 320, "height": 700})
+                await cell.scroll_into_view_if_needed()
+                await page.screenshot(
+                    path=str(OUT / "mobile-choice-cell-editor.png"), full_page=True
+                )
+                await page.set_viewport_size({"width": 1280, "height": 1000})
+                await cell.get_by_role("button", name="Save", exact=True).click()
+                await response_cell.get_by_text("Software engineering", exact=True).wait_for()
+                saved_page = await events.answer_page(100, career.id, 1)
+                assert saved_page.members[0]["organizer_values"]
+                assert saved_page.members[0]["answers"][q["id"]] == ["Software engineering"]
+                assert await page.get_by_role("tab", name="Messages", exact=True).count() == 0
+                history = page.locator(".broadcast-history")
+                await history.get_by_text("1 finished", exact=True).wait_for()
+                await history.get_by_text("Sent 2 / 2 · Failed 0 · Unconfirmed 0").wait_for()
+                assert await history.get_by_text("Draft", exact=True).count() == 0
+                assert await history.get_by_role("button", name="Write in Telegram").count() == 0
+                assert await history.get_by_role("button", name="Stop remaining").count() == 0
+                assert await page.locator(".participants").evaluate(
+                    "node => Boolean(node.compareDocumentPosition(document.querySelector('.broadcast-history')) & Node.DOCUMENT_POSITION_FOLLOWING)"
+                )
+                link = history.get_by_role("link")
+                expected = f"https://t.me/example_bot?start=message_{sent_message['id']}"
+                assert await link.get_attribute("href") == expected
+                await page.evaluate(
+                    "() => { window.testComposeLink=null; window.testClosed=false; }"
+                )
+                await link.click()
+                await page.wait_for_function("() => window.testComposeLink && window.testClosed")
+                assert await page.evaluate("window.testComposeLink") == expected
+                await page.get_by_role("tab", name="Overview", exact=True).click()
+                assert await page.get_by_label("Form type", exact=True).count() == 0
+                await page.get_by_label("Department", exact=True).fill("Students' Union")
+                await page.get_by_role("button", name="Save changes", exact=True).click()
+                await page.get_by_text("All changes saved", exact=True).wait_for()
+                assert (await events.settings(100, career.id)).department == "Students' Union"
+                await page.get_by_role("tab", name="People", exact=True).click()
+                await page.get_by_role("button", name="Next", exact=True).click()
+                await page.get_by_text("Page 2 of 2", exact=True).wait_for()
                 await page.get_by_role("button", name="Refresh", exact=True).click()
                 await page.get_by_text("Page 2 of 2", exact=True).wait_for()
                 await page.screenshot(path=str(OUT / "desktop-members.png"), full_page=True)
                 await page.set_viewport_size({"width": 390, "height": 844})
-                for tab_name in ["Overview", "Questions", "Participants", "QR"]:
+                for tab_name in ["Overview", "Questions", "People", "QR"]:
                     assert await page.get_by_role("tab", name=tab_name, exact=True).is_visible()
                 await page.screenshot(path=str(OUT / "mobile-members.png"), full_page=True)
                 assert await page.evaluate(
@@ -659,34 +755,33 @@ async def main():
                 await page.get_by_role("tab", name="Overview", exact=True).click()
                 assert await page.locator("#event-qr").count() == 0
                 await page.screenshot(path=str(OUT / "mobile-overview.png"), full_page=True)
-                await page.get_by_label("Event name", exact=True).fill("Unsaved name")
+                await page.get_by_label("Form name", exact=True).fill("Unsaved name")
                 page.once("dialog", lambda dialog: dialog.dismiss())
-                await page.get_by_role("button", name="All events").click()
+                await page.get_by_role("button", name="All forms").click()
                 assert (
-                    await page.get_by_label("Event name", exact=True).input_value()
-                    == "Unsaved name"
+                    await page.get_by_label("Form name", exact=True).input_value() == "Unsaved name"
                 )
                 page.once("dialog", lambda dialog: dialog.accept())
-                await page.get_by_role("button", name="All events").click()
-                await page.get_by_role("heading", name="Your events").wait_for()
+                await page.get_by_role("button", name="All forms").click()
+                await page.get_by_role("heading", name="Your forms").wait_for()
                 await page.get_by_role("button", name="Career Lab 2026").click()
                 assert (
-                    await page.get_by_label("Event name", exact=True).input_value()
+                    await page.get_by_label("Form name", exact=True).input_value()
                     == "Career Lab 2026"
                 )
                 # Telegram's native BackButton must respect the same unsaved-change guard.
-                await page.get_by_label("Event name", exact=True).fill("Keep this draft")
+                await page.get_by_label("Form name", exact=True).fill("Keep this draft")
                 page.once("dialog", lambda dialog: dialog.dismiss())
                 await page.evaluate("window.testBack()")
                 assert (
-                    await page.get_by_label("Event name", exact=True).input_value()
+                    await page.get_by_label("Form name", exact=True).input_value()
                     == "Keep this draft"
                 )
                 page.once("dialog", lambda dialog: dialog.accept())
                 await page.evaluate("window.testBack()")
-                await page.get_by_role("heading", name="Your events").wait_for()
+                await page.get_by_role("heading", name="Your forms").wait_for()
                 await page.get_by_role("button", name="Career Lab 2026").click()
-                await page.get_by_label("Event name", exact=True).wait_for()
+                await page.get_by_label("Form name", exact=True).wait_for()
 
                 light = await page.locator(".event-studio").evaluate(
                     "node => getComputedStyle(node).backgroundColor"
@@ -713,7 +808,7 @@ async def main():
                 ios_page.on("pageerror", lambda error: browser_errors.append(str(error)))
                 await ios_page.goto(f"http://127.0.0.1:{port}/?event={draft.id}")
                 await ios_page.get_by_role("heading", name="Welcome Night").wait_for()
-                assert await ios_page.get_by_text("Event name", exact=True).is_visible()
+                assert await ios_page.get_by_text("Form name", exact=True).is_visible()
                 await ios_page.get_by_role("tab", name="Questions", exact=True).click()
                 assert await ios_page.get_by_text("Answer type", exact=True).is_visible()
                 assert (
@@ -762,14 +857,14 @@ async def main():
                             ("events", None, None),
                             ("overview", draft.id, "Overview"),
                             ("questions", draft.id, "Questions"),
-                            ("participants", career.id, "Participants"),
+                            ("participants", career.id, "People"),
                             ("qr", draft.id, "QR"),
                         ]:
                             await visual.set_viewport_size({"width": 390, "height": 844})
                             suffix = f"?event={event_id}" if event_id else ""
                             await visual.goto(f"http://127.0.0.1:{port}/{suffix}")
                             title = (
-                                "Your events"
+                                "Your forms"
                                 if event_id is None
                                 else (
                                     "Career Lab 2026" if event_id == career.id else "Welcome Night"
@@ -797,7 +892,7 @@ async def main():
                                 )
                             if view == "participants":
                                 await visual.get_by_text(
-                                    "12 participants · 10 per page", exact=True
+                                    "12 people · 10 per page", exact=True
                                 ).wait_for()
                                 await visual.locator("tbody tr").first.wait_for()
                             if view == "qr":
@@ -852,7 +947,7 @@ async def main():
                 legacy_page = await legacy.new_page()
                 legacy_page.on("pageerror", lambda error: browser_errors.append(str(error)))
                 await legacy_page.goto(f"http://127.0.0.1:{port}/")
-                await legacy_page.get_by_role("heading", name="Your events").wait_for()
+                await legacy_page.get_by_role("heading", name="Your forms").wait_for()
                 assert await legacy_page.evaluate("window.testHeaderColor") == "secondary_bg_color"
                 assert (
                     await legacy_page.evaluate("window.testBackgroundColor") == "secondary_bg_color"

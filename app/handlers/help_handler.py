@@ -25,23 +25,23 @@ async def cmd_help(message: Message, can_open_panel=False, verified_student=None
             "Use /me to view your own verified student profile\n\n",
         )
     text += Text(
-        Bold("Join an event"),
+        Bold("Open a form"),
         "\n",
         "Scan its QR code with your camera and open the bot (tap Start if Telegram asks)\n",
-        "Complete any event questions here in chat\n\n",
-        Bold("Organize an event"),
+        "Answer its questions here in chat\n\n",
+        Bold("Create a form"),
         "\n",
-        "Create an event with ",
-        Code("/new_event [event name]"),
+        "Create an event or advisor application form with ",
+        Code("/new_form [form name]"),
         "\n",
     )
     if can_open_panel:
-        text += Text("Use /panel to manage events, questions and participants\n")
+        text += Text("Use /panel to manage forms, editable tables and messages\n")
     text += Text("\n", Bold("Commands"), "\n")
     commands = chat_commands(registered=verified_student is not None, organizer=can_open_panel)
     text += Text("\n".join(f"/{item.command} — {item.description}" for item in commands))
     text += Text(
-        "\n\nEvent organizers can see their participants' contact details and event answers",
+        "\n\nForm organizers can see their respondents' contact details and answers",
     )
     await message.answer(**text.as_kwargs())
 

@@ -17,6 +17,9 @@ from app.registration_state import registration_complete
 
 
 async def enroll(session, insert, user, event_id, now) -> int | None:
+    retention = await session.scalar(
+        select(Event.response_retention_days).where(Event.id == event_id)
+    )
     result = await session.execute(
         insert(EventRegistration)
         .values(
@@ -24,6 +27,7 @@ async def enroll(session, insert, user, event_id, now) -> int | None:
             telegram_user_id=user.id,
             outlook_profile_id=user.outlook_profile_id,
             registered_at=now,
+            table_expires_at=now + timedelta(days=retention),
         )
         .on_conflict_do_nothing()
         .returning(EventRegistration.id)

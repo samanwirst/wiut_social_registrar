@@ -15,10 +15,10 @@ async def cmd_info(message: Message) -> None:
         Italic("By students, for students"),
         "\n\n",
         Bold("Your next campus moment"),
-        "\nVerify once, scan an invitation and join your next event\n"
-        "Answer event questions right here in chat\n\n",
+        "\nVerify once for WIUT events, advisor applications and more\n"
+        "Answer form questions right here in chat\n\n",
         Bold("Bring people together"),
-        "\nCreate events, collect answers and manage participants in your event panel\n\n",
+        "\nCreate forms, edit response tables and message selected people in your organizer panel\n\n",
         "Designed and developed by\n",
         TextLink("Mukhammadiev Samandar", url="https://t.me/samanwirst"),
         ", ",

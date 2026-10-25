@@ -1,10 +1,18 @@
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from sqlalchemy import func, select
 
 from app.clock import utc_now
 from app.events.access import owned_event, require_registered
-from app.models import Event, EventAnswers, EventRegistration, OutlookProfile, TelegramUser
+from app.models import (
+    Event,
+    EventAnswers,
+    EventRegistration,
+    EventTableValues,
+    OutlookProfile,
+    TelegramUser,
+)
 from app.pagination import page_bounds
 
 
@@ -65,7 +73,7 @@ class EventQueries:
         async with self.db.transaction() as session:
             return await self._members(session, user_id, event_id, page)
 
-    async def _members(self, session, user_id, event_id, page):
+    async def _members(self, session, user_id, event_id, page, *, extended=False):
         event = await owned_event(
             session, user_id, event_id, denied="Only the event organizer can view its members."
         )
@@ -87,6 +95,10 @@ class EventQueries:
                         OutlookProfile.email.label("email"),
                         TelegramUser.phone_number.label("phone_number"),
                         TelegramUser.education_level.label("education_level"),
+                        EventRegistration.id.label("registration_id"),
+                        EventRegistration.table_revision.label("row_revision"),
+                        EventRegistration.registered_at.label("registered_at"),
+                        EventRegistration.table_expires_at.label("editable_until"),
                     )
                     .select_from(EventRegistration)
                     .join(TelegramUser, TelegramUser.id == EventRegistration.telegram_user_id)
@@ -103,11 +115,27 @@ class EventQueries:
             .mappings()
             .all()
         )
-        return MembersPage(event, total, page, pages, [dict(row) for row in rows])
+        values = [dict(row) for row in rows]
+        if not extended:
+            for item in values:
+                for key in ("registration_id", "row_revision", "registered_at", "editable_until"):
+                    item.pop(key)
+        return MembersPage(event, total, page, pages, values)
 
     async def answer_page(self, user_id, event_id, page=0):
         async with self.db.transaction() as session:
-            members = await self._members(session, user_id, event_id, page)
+            members = await self._members(session, user_id, event_id, page, extended=True)
+            table_rows = (
+                await session.scalars(
+                    select(EventTableValues).where(
+                        EventTableValues.registration_id.in_(
+                            [m["registration_id"] for m in members.members]
+                        ),
+                        EventTableValues.expires_at > self.clock(),
+                    )
+                )
+            ).all()
+            table_values = {row.registration_id: row.values for row in table_rows}
             rows = (
                 await session.execute(
                     select(EventRegistration.telegram_user_id, EventAnswers)
@@ -123,6 +151,14 @@ class EventQueries:
             ).all()
             answers = {user_id: response for user_id, response in rows}
             for member in members.members:
+                member["organizer_values"] = table_values.get(member["registration_id"], {})
+                member["editable_until"] = (
+                    member["editable_until"]
+                    or member["registered_at"]
+                    + timedelta(days=members.event.response_retention_days)
+                ).isoformat()
+                member.pop("registered_at")
+                member.pop("registration_id")
                 response = answers.get(member["telegram_id"])
                 member["answers"] = response.answers if response else None
                 member["answers_expires_at"] = response.expires_at.isoformat() if response else None

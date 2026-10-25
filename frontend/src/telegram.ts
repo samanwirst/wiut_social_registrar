@@ -14,6 +14,8 @@ interface TelegramWebApp {
   offEvent(event: string, callback: () => void): void;
   enableClosingConfirmation(): void;
   disableClosingConfirmation(): void;
+  openTelegramLink?(url: string): void;
+  close?(): void;
   BackButton: { show(): void; hide(): void; onClick(callback: () => void): void; offClick(callback: () => void): void };
   HapticFeedback: { notificationOccurred(type: 'success' | 'error'): void };
 }
@@ -24,6 +26,11 @@ declare global {
 
 export const telegram = window.Telegram?.WebApp;
 export const supports = (version: string) => telegram?.isVersionAtLeast?.(version) !== false;
+
+export function openTelegramChat(url: string) {
+  if (telegram?.openTelegramLink) { telegram.openTelegramLink(url); telegram.close?.(); }
+  else window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 export function useTelegramBack(visible: boolean, onBack: () => void) {
   useEffect(() => {

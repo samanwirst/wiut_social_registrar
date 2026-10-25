@@ -20,7 +20,7 @@ export function useRemoteResource<T>(load: (signal: AbortSignal) => Promise<T>) 
     return () => controller.abort();
   }, [load, revision]);
 
-  return { data, loading, error, reload };
+  return { data, loading, error, reload, update: setData };
 }
 
 export function useObjectUrl(blob: Blob | null) {

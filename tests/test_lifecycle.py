@@ -64,12 +64,15 @@ async def test_bot_runs_retention_when_the_mini_app_is_disabled(tmp_path, monkey
         await app.database.migrate()
         await app.run()
         task = app.answer_cleanup.task
+        broadcast_task = app.broadcast_worker.task
         assert task is not None and not task.done()
+        assert broadcast_task is not None and not broadcast_task.done()
         assert app.miniapp_server.runner is None
         app.dp.start_polling.assert_awaited_once()
     finally:
         await app.shutdown()
     assert task.done()
+    assert broadcast_task.done() and app.broadcast_worker.task is None
 
 
 @pytest.mark.asyncio

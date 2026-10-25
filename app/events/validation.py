@@ -20,17 +20,23 @@ class EventChanges:
     response_retention_days: int
     questions: list[dict]
     revision: int
+    department: str | None = None
 
     @classmethod
     def parse(cls, data):
-        if not isinstance(data, dict) or set(data) != {
+        required = {
             "title",
             "description",
             "registration_open",
             "response_retention_days",
             "questions",
             "revision",
-        }:
+        }
+        if (
+            not isinstance(data, dict)
+            or not required <= set(data)
+            or set(data) - required - {"department"}
+        ):
             raise EventError(
                 "Submit the event title, description, status, retention, questions, and revision."
             )
@@ -43,6 +49,11 @@ class EventChanges:
             raise EventError("Keep answers for 1 to 90 days.")
         if not isinstance(data["registration_open"], bool) or type(data["revision"]) is not int:
             raise EventError("Supply a valid registration status and revision.")
+        department = data.get("department")
+        if "department" in data and (
+            not isinstance(department, str) or len(department.strip()) > 100
+        ):
+            raise EventError("Use at most 100 characters for the department")
         return cls(
             title,
             description.strip(),
@@ -50,4 +61,5 @@ class EventChanges:
             retention,
             validate_questions(data["questions"]),
             data["revision"],
+            department.strip() if department is not None else None,
         )

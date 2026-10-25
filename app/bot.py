@@ -10,6 +10,7 @@ from aiogram.client.telegram import PRODUCTION, TEST
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 
+from app.broadcasts import BroadcastRepository
 from app.commands import CommandMenu
 from app.configuration.database import local_database_url
 from app.db import Database
@@ -20,6 +21,7 @@ from app.middleware import CommandMenuMiddleware, PrivateChatMiddleware, UserCon
 from app.miniapp import MiniAppServer
 from app.repositories import RegistrationRepository
 from app.services.answer_cleanup import AnswerCleanup
+from app.services.broadcast_worker import BroadcastWorker
 from app.services.registrar_service import RegistrarService
 from app.services.registration_service import RegistrationService
 from app.services.runtime_health import RuntimeHealth
@@ -52,6 +54,10 @@ class BotApp:
         self._previous_exception_handler = None
         self._exception_handler = None
         self.event_repository = EventRepository(self.database)
+        self.broadcast_repository = BroadcastRepository(self.database)
+        self.broadcast_worker = BroadcastWorker(
+            self.broadcast_repository, self.bot, health=self.health
+        )
         self.event_survey = EventSurvey(self.event_repository)
         self.miniapp_server = MiniAppServer(
             self.event_repository, self.bot, settings, runtime_health=self.health
@@ -74,6 +80,7 @@ class BotApp:
             mini_app_url=settings.mini_app_url,
             command_menu=self.command_menu,
             runtime_health=self.health,
+            broadcast_repository=self.broadcast_repository,
         )
         self.dp.include_routers(*create_routers())
         self.dp.update.outer_middleware(self.update_drain)
@@ -114,6 +121,7 @@ class BotApp:
             logger.warning("Could not initialize the command menu (%s).", type(error).__name__)
         await self.answer_cleanup.start()
         await self.miniapp_server.start()
+        await self.broadcast_worker.start()
         await self.dp.start_polling(
             self.bot,
             allowed_updates=self.dp.resolve_used_update_types(),
@@ -137,4 +145,5 @@ class BotApp:
             resources.push_async_callback(self.answer_cleanup.close)
             resources.push_async_callback(self.miniapp_server.close)
             resources.push_async_callback(self.health.close)
+            resources.push_async_callback(self.broadcast_worker.close)
             resources.push_async_callback(self.update_drain.close)

@@ -25,7 +25,7 @@ export function EventShare({ event, designer, notify }: {
   const elapsed = `${Math.floor(designer.elapsed / 60)}:${String(designer.elapsed % 60).padStart(2, '0')}`;
 
   const copy = async () => {
-    try { await navigator.clipboard.writeText(event.link); notify('Event link copied.'); }
+    try { await navigator.clipboard.writeText(event.link); notify('Form link copied'); }
     catch { notify('Could not copy. Select the event link below the QR code.', true); }
   };
   const download = () => {
@@ -41,17 +41,13 @@ export function EventShare({ event, designer, notify }: {
     });
   };
 
-  return <Section className="studio-section qr-page" header="Event QR code"
-    footer="Students scan this QR code with their camera. Registration and questions happen in the bot.">
+  return <Section className="studio-section qr-page" header="Form QR code"
+    footer="Students scan this QR code with their camera. Verification and questions happen in the bot">
     <div className="share-content">
       <form className="qr-designer" aria-label="QR design" onSubmit={e => { e.preventDefault(); generate(); }}>
         <Field label="Describe your design"><Textarea aria-label="Design prompt" rows={3} maxLength={1200} value={prompt}
           disabled={!event.qr_styling_enabled} placeholder="Describe the theme, colors, and style you have in mind"
           onChange={e => setPrompt(e.target.value)} /></Field>
-        <Cell className="qr-background" Component="label" multiline
-          subtitle={transparent ? 'For light backgrounds and print layouts' : 'Include artwork around your QR code'}
-          after={<Switch aria-label="Transparent background" checked={transparent}
-            onChange={e => setTransparent(e.target.checked)} />}>Transparent background</Cell>
         <Button type="submit" stretched
           disabled={!event.qr_styling_enabled || !prompt.trim() || designer.busy || designer.restoring || designer.resetting || designer.cooldown > 0}>
           {designer.busy ? 'Creating design' : designer.cooldown > 0 ? `Generate again in ${designer.cooldown}s` : 'Generate design'}</Button>
@@ -63,7 +59,7 @@ export function EventShare({ event, designer, notify }: {
           ? designer.syncError ? 'Connection interrupted' : 'Restoring your design'
           : designer.resetting ? 'Switching to standard QR' : designer.busy
           ? designer.syncError ? 'Connection interrupted' : phase
-          : designId ? failed ? 'Previous design' : 'Your design' : 'Event QR'}</strong>
+          : designId ? failed ? 'Previous design' : 'Your design' : 'Form QR'}</strong>
           {designer.busy ? <Caption className="muted" aria-label="Elapsed time">{elapsed}</Caption>
             : qr && designId ? <span className="qr-ready"><CheckIcon />Ready</span> : null}</div>
         {designer.restoring || designer.resetting ? <div className="qr-preview-loading" role="status">
@@ -84,8 +80,11 @@ export function EventShare({ event, designer, notify }: {
               : <div className="qr-preview-loading" role="status"><Spinner size="m" /><Caption>Preparing your PNG</Caption></div>}</div>
           {error ? <Caption className="danger" role="alert">{error}</Caption> : null}
           <Caption className="muted">PNG · {transparent ? 'Transparent' : 'Opaque'} background{designId ? ' · Scan checked' : ''}</Caption>
+          <Cell className="qr-background" Component="label" multiline
+            subtitle={transparent ? 'For light backgrounds and print layouts' : 'Include artwork around your QR code'}
+            after={<Switch aria-label="Transparent background" checked={transparent}
+              onChange={e => setTransparent(e.target.checked)} />}>Transparent background</Cell>
           <Button type="button" stretched disabled={!qr} onClick={download}>Download PNG</Button>
-          {qr && transparent ? <Caption className="muted qr-surface-hint">Place on a light surface so the QR stays easy to scan</Caption> : null}
         </>}
         {!designer.busy && failed ? <div className="qr-design-error" role="alert"><strong>Couldn't create this design</strong>
           <Caption>{failed}</Caption>{designId ? <Caption className="muted">Your previous design is still available above</Caption> : null}</div> : null}

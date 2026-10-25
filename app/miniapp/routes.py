@@ -21,6 +21,7 @@ def event_json(event):
         "form_revision": event.form_revision,
         "form_locked": event.form_locked,
         "created_at": event.created_at.isoformat(),
+        "department": event.department,
     }
 
 
@@ -41,7 +42,7 @@ async def list_events(request):
     counts = page.member_counts
     return web.json_response(
         {
-            "events": [
+            ("forms" if request.path == "/api/forms" else "events"): [
                 {**event_json(event), "members": counts.get(event.id, 0)} for event in page.events
             ],
             "page": page.page,
@@ -81,6 +82,8 @@ async def event_members(request):
             "pages": page.pages,
             "total": page.total,
             "questions": page.event.questions,
+            "columns": page.event.table_columns,
+            "columns_revision": page.event.columns_revision,
         }
     )
 

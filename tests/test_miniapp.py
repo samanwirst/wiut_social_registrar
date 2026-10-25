@@ -65,7 +65,7 @@ def test_auth_accepts_signed_fields_including_telegram_signature():
 @pytest.mark.asyncio
 async def test_static_assets_are_public_but_api_always_needs_telegram_auth(client):
     response = await client.get("/")
-    assert response.status == 200 and "Event Studio" in await response.text()
+    assert response.status == 200 and "WIUT · Forms" in await response.text()
     assert "no-store" == response.headers["Cache-Control"]
     assert "frame-ancestors" in response.headers["Content-Security-Policy"]
     for name in ("app.js", "style.css", "style.svg"):
@@ -135,7 +135,7 @@ async def test_ai_designs_are_optional_and_disabled_without_provider_credentials
 @pytest.mark.asyncio
 async def test_other_registered_users_cannot_access_any_event_management_endpoint(client):
     response = await client.get("/api/events", headers=headers(200))
-    assert response.status == 403 and "/new_event" in (await response.json())["error"]
+    assert response.status == 403 and "/new_form" in (await response.json())["error"]
     own_event = await client.events.create(200, "Another organizer's event")
     response = await client.get("/api/events", headers=headers(200))
     assert [event["id"] for event in (await response.json())["events"]] == [own_event.id]
@@ -170,7 +170,7 @@ async def test_registered_non_organizer_is_denied_every_api_endpoint_until_creat
     )
     for path in paths:
         response = await client.get(path, headers=headers(200))
-        assert response.status == 403 and "/new_event" in (await response.json())["error"]
+        assert response.status == 403 and "/new_form" in (await response.json())["error"]
     for method, path in (
         (client.put, f"/api/events/{client.event_id}"),
         (client.delete, f"/api/events/{client.event_id}/answers"),

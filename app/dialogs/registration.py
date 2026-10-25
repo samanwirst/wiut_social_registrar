@@ -80,7 +80,7 @@ async def welcome(message: Message) -> None:
     content = Text(
         Bold("Welcome to Social Registrar"),
         "\n",
-        "Register once, join WIUT events with a scan\n\n",
+        "Register once for WIUT events, advisor applications, and more\n\n",
         Bold("Step 1 of 4"),
         "\n",
         "Send your own student ID as text, including any leading zeroes\n",

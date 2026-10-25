@@ -13,7 +13,7 @@ function Workspace() {
 
   return <>
     {event ? <header className="brandbar"><Button type="button" mode="plain" size="s" before={<Chevron direction="left" />} disabled={loading} onClick={() => { void loadEvents(listPage); }}>
-      All events</Button></header> : null}
+      All forms</Button></header> : null}
     <main className="page" aria-busy={loading}>
       {error ? <Placeholder header="We couldn't open your workspace" description={error}
         action={<Button type="button" mode="bezeled" onClick={retry}>Try again</Button>} />
@@ -29,7 +29,7 @@ function Workspace() {
 export function App() {
   const theme = useTelegramTheme();
   return <AppRoot {...theme} data-platform={theme.platform} data-appearance={theme.appearance} className="event-studio">
-    {telegram?.initData ? <Workspace /> : <main className="page"><Placeholder header="Open Event Studio in Telegram"
-      description="Use /panel in your private chat with the bot. Finish student registration and create an event to manage it here." /></main>}
+    {telegram?.initData ? <Workspace /> : <main className="page"><Placeholder header="Open your forms in Telegram"
+      description="Use /panel in your private chat with the bot. Finish student registration and create a form to manage it here" /></main>}
   </AppRoot>;
 }

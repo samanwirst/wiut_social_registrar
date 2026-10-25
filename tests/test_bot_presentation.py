@@ -16,7 +16,7 @@ def test_profile_copy_fits_telegram_limits_and_avatar_is_a_real_jpeg():
     assert 1 <= len(ABOUT) <= 120
     assert 1 <= len(DESCRIPTION) <= 512
     assert AVATAR.read_bytes().startswith(b"\xff\xd8\xff")
-    assert "/new_event" in DESCRIPTION
+    assert "/new_form" in DESCRIPTION
 
 
 def test_profile_entities_keep_special_characters_and_copyable_student_id():
@@ -41,7 +41,7 @@ def test_command_visibility_matches_registration_and_organizer_permissions():
     student = [item.command for item in chat_commands(registered=True)]
     organizer = [item.command for item in chat_commands(registered=True, organizer=True)]
     assert "resend" in visitor and "new_event" not in visitor and "panel" not in visitor
-    assert "new_event" in student and "resend" not in student and "panel" not in student
+    assert "new_form" in student and "resend" not in student and "panel" not in student
     assert "panel" in organizer
     assert "me" not in visitor and "me" in student and "me" in organizer
     assert student[-3:] == organizer[-3:] == ["me", "help", "info"]

@@ -134,7 +134,7 @@ def collect(args, previous, *, now):
         else:
             for component, status in runtime.get("components", {}).items():
                 if (
-                    component in {"database", "outlook", "polling", "cleanup"}
+                    component in {"database", "outlook", "polling", "cleanup", "broadcasts"}
                     and status.get("ok") is False
                 ):
                     reason = status.get("reason", "unavailable")
@@ -149,7 +149,8 @@ def collect(args, previous, *, now):
             for key, value in runtime.get("incidents", {}).items():
                 if (
                     re.fullmatch(
-                        r"(?:handler|background|fatal|miniapp|qr|email):[A-Za-z0-9_]{1,80}", key
+                        r"(?:handler|background|fatal|miniapp|qr|email|broadcast):[A-Za-z0-9_]{1,80}",
+                        key,
                     )
                     and now - value.get("at", 0) < 60
                 ):
@@ -194,7 +195,7 @@ def observe(state, issues, recipients, *, now, name):
                 description = issues[key]
             elif (
                 key.partition(":")[0]
-                in {"handler", "background", "fatal", "miniapp", "qr", "email"}
+                in {"handler", "background", "fatal", "miniapp", "qr", "email", "broadcast"}
                 and ":" in key
             ):
                 description = "No new application errors reported for 60 seconds (" + key + ")"

@@ -182,3 +182,48 @@ These boundaries are project design decisions, informed by the following officia
 
 No framework prescribes this exact directory layout. Avoid adding layers unless a repeated
 rule or an independently changing responsibility justifies one.
+
+
+## General forms, table editing, and messages
+
+`events` is the stable storage/API facade for all forms, with an optional `department` label.
+There is no form-type selection or type-dependent behavior. The public `/api/forms` routes
+and `/new_form` command use the same ownership, enrollment, questionnaire, and QR implementations
+as legacy event links; `/new_event` remains a creation alias. The unused `kind` storage column
+is retained for compatibility with the applied 0007 migration and is not exposed by the API.
+No parallel profile or participation system is introduced.
+
+`app/events/table.py` owns typed organizer columns and edits to temporary question responses.
+`app/table_fields.py` validates them. Edits lock the owned form and registration, compare row
+and column revisions, and commit one cell with its revision increment. Columns have a separate
+revision from form/questionnaire settings. Student identities/contacts are never write targets.
+`EventRegistration.table_expires_at` is a durable non-extending deadline, backfilled on upgrade;
+shortened deadlines survive cleanup and later retention extensions. New organizer values are
+in `event_table_values`, filtered/cleaned like answers. Removing a column redacts its values.
+
+`app/broadcasts.py` owns audience snapshots, hourly limits, preview revisions, confirmation,
+cancellation, claims, outcomes, and recipient retention. It locks the owner before an owned
+broadcast when both locks are needed; queue operations lock a broadcast before a recipient.
+PostgreSQL claims use SKIP LOCKED. SQLite retains BEGIN IMMEDIATE. No network call holds a lock.
+`app/dialogs/broadcasts.py` and `app/handlers/broadcast_handler.py` compose native Telegram
+ForceReply/copyMessage previews. They consume only replies to the active owner's saved prompt;
+regular commands, verification, and questionnaire answers retain their handlers and state.
+Completed history is filtered before pagination and appears below the People table. Its
+`message_<uuid>` bot links check the requesting owner and completed state before copying
+the immutable sent preview back to that owner. `original_message_id` links new copies to
+the organizer's original through ReplyParameters; old records keep working without it.
+This uses supported bot links because private bot chats have no direct message permalinks.
+Both message references expire with the existing thirty-day recipient cleanup.
+
+`app/services/broadcast_worker.py` is the sole runtime dispatcher. It claims one recipient,
+commits the claim, copies the bot-owned preview, then commits the outcome. Retries are restricted
+to definite Telegram flood rejections with a five-attempt budget. Ambiguous copies and abandoned
+claims are recorded as unknown instead of replayed. Cancellation stops pending work, including
+rejected in-flight work being requeued. Thirty days later recipient rows/source references are
+removed; aggregate counts remain. Worker startup/shutdown and safe health reporting belong to
+BotApp. The worker operates even without the HTTP server.
+
+The Mini App uses labeled TelegramUI checkboxes, typed inline cell editors, optimistic revisions,
+explicit saves, and the native Telegram link handoff. It stores neither selections nor table data
+in localStorage. Official design and transport references are in
+[forms-and-messages.md](forms-and-messages.md).

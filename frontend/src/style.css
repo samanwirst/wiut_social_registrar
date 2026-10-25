@@ -162,3 +162,38 @@ td a { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Editable form tables use Telegram theme tokens and touch-size controls. */
+.audience-tools { display: grid; gap: var(--studio-space-3); }
+.broadcast-entry { color: var(--tgui--text_color); text-decoration: none; cursor: pointer; }
+.audience-tools { padding: var(--studio-inset); border-block: 1px solid var(--tgui--divider); }
+.table-columns > button { margin-inline: var(--studio-space-2); }
+.table-columns .field-stack { padding: var(--studio-inset); }
+.column-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--studio-space-2); }
+.column-row > span { flex: 1; min-width: 100px; overflow-wrap: anywhere; }
+.selection-cell { min-width: 56px; width: 56px; max-width: 56px; padding-inline: var(--studio-space-2); }
+.selection-cell label { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.selection-cell [aria-hidden=true], .cell-check [aria-hidden=true] { pointer-events: none; }
+.editable-cell { padding: var(--studio-space-1); }
+.event-studio .cell-value { appearance: none; font: inherit; color: inherit; display: block; width: 100%; min-height: 44px; padding: var(--studio-space-2) var(--studio-space-3); background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius-control); text-align: start; overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; }
+.cell-value:disabled { color: var(--studio-muted); cursor: default; }
+.cell-value:not(:disabled):focus-visible, .cell-value:not(:disabled):hover { border-color: var(--tgui--link_color); background: var(--tgui--secondary_fill); }
+.cell-editing { min-width: 220px; max-width: 280px; }
+.cell-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--studio-space-1); margin: 0; }
+.cell-input { min-width: 0; }
+.event-studio .cell-input > div:not(.cell-check) { min-width: 0; padding: 0; background: transparent; border-radius: var(--studio-radius-control); }
+.event-studio .cell-input > div:not(.cell-check) > label { min-width: 0; min-height: var(--studio-hit-size); height: auto; padding: 0 var(--studio-space-2); border-radius: var(--studio-radius-control); background: transparent; box-shadow: inset 0 0 0 1px var(--tgui--outline); }
+.event-studio .cell-input > div:not(.cell-check) > label:focus-within { box-shadow: inset 0 0 0 1px var(--tgui--link_color); }
+.cell-input input:not([type=checkbox]), .cell-input select, .cell-input textarea { min-width: 0; width: 100%; font-size: 16px; line-height: 20px; }
+.cell-input input:not([type=checkbox]), .cell-input select { min-height: var(--studio-hit-size); height: var(--studio-hit-size); padding-block: 0; }
+.cell-input select { padding-inline: 0 24px; text-overflow: ellipsis; }
+.cell-input textarea { min-height: var(--studio-hit-size); max-height: 112px; padding: var(--studio-space-2) 0; resize: vertical; }
+.cell-check { display: flex; align-items: center; gap: var(--studio-space-2); min-height: 44px; }
+.cell-actions { display: flex; gap: 0; }
+.event-studio .cell-action { display: inline-flex; align-items: center; justify-content: center; width: var(--studio-hit-size); min-width: var(--studio-hit-size); height: var(--studio-hit-size); padding: 0; }
+.cell-dismiss { color: var(--studio-muted); }
+.cell-error { grid-column: 1 / -1; }
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.event-studio .tabs [role=tab] { flex: 1 0 80px; min-width: 80px; }
+.tabs > [aria-hidden=true] { display: none; }
+.event-studio[data-platform=base] .tabs [aria-selected=true] { box-shadow: inset 0 -3px var(--tgui--link_color); }

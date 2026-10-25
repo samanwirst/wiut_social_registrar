@@ -1,4 +1,5 @@
 from app.handlers import (
+    broadcast_handler,
     contact_handler,
     education_handler,
     event_handler,
@@ -25,6 +26,7 @@ def create_routers():
         education_handler.create_router(),
         event_handler.create_router(),
         panel_handler.create_router(),
+        broadcast_handler.create_router(),
         survey_handler.create_router(),
         registration_handler.create_router(),
     )

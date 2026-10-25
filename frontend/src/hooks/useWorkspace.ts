@@ -9,7 +9,7 @@ type WorkspaceData = EventDetails | EventsPage;
 export function useWorkspace(notify: Notify) {
   const [initialEventId] = useState(() => new URLSearchParams(location.search).get('event'));
   const load = useCallback(async (signal: AbortSignal): Promise<WorkspaceData> => {
-    const path = initialEventId ? `/api/events/${encodeURIComponent(initialEventId)}` : '/api/events';
+    const path = initialEventId ? `/api/forms/${encodeURIComponent(initialEventId)}` : '/api/forms';
     const [, data] = await Promise.all([
       api('/api/session', { signal }), api<WorkspaceData>(path, { signal }),
     ]);
@@ -22,8 +22,8 @@ export function useWorkspace(notify: Notify) {
   const navigationPending = useRef(false);
   const guard = useRef(() => true);
   const current = view ?? initial.data;
-  const events = current && 'events' in current ? current : null;
-  const event = current && !('events' in current) ? current : null;
+  const events = current && 'forms' in current ? current : null;
+  const event = current && !('forms' in current) ? current : null;
 
   useEffect(() => { telegram?.ready(); telegram?.expand(); }, []);
 
@@ -34,16 +34,16 @@ export function useWorkspace(notify: Notify) {
     try {
       const data = await api<WorkspaceData>(path);
       setView(data);
-      if ('events' in data) setListPage(data.page);
+      if ('forms' in data) setListPage(data.page);
     } catch (error) { notify(errorMessage(error), true); }
     finally { navigationPending.current = false; setNavigating(false); }
   }, [notify]);
 
   const loadEvents = useCallback((page: number) => {
-    if (!navigationPending.current && guard.current()) void navigate(`/api/events?page=${page}`);
+    if (!navigationPending.current && guard.current()) void navigate(`/api/forms?page=${page}`);
   }, [navigate]);
   const openEvent = useCallback((id: string) => {
-    void navigate(`/api/events/${encodeURIComponent(id)}`);
+    void navigate(`/api/forms/${encodeURIComponent(id)}`);
   }, [navigate]);
   const goBack = useCallback(() => loadEvents(listPage), [listPage, loadEvents]);
   useTelegramBack(event !== null, goBack);
