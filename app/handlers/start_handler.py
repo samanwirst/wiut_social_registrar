@@ -3,6 +3,7 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message, ReplyKeyboardRemove
 
 from app.chat_formatting import card, error_text, event_confirmation
+from app.dialogs.broadcasts import open_composer, show_sent_message
 from app.dialogs.registration import code_prompt, prompt_remaining_profile_fields, welcome
 from app.dialogs.surveys import resume_survey, send_question
 from app.event_repository import EventError, event_id_from_payload
@@ -18,7 +19,20 @@ async def cmd_start(
     event_survey,
     mini_app_url="",
     can_open_panel=False,
+    broadcast_repository=None,
 ) -> None:
+    if command.args and command.args.startswith("message_"):
+        if broadcast_repository is not None:
+            await show_sent_message(
+                message, broadcast_repository, command.args.removeprefix("message_")
+            )
+        return
+    if command.args and command.args.startswith("compose_"):
+        if broadcast_repository is not None:
+            await open_composer(
+                message, broadcast_repository, command.args.removeprefix("compose_")
+            )
+        return
     await registration_repository.event(message.from_user.id, "bot_started")
     if command.args:
         try:
@@ -44,15 +58,15 @@ async def cmd_start(
             return
         await message.answer(
             **card(
-                f"Event saved: {event.title}",
+                f"Form saved: {event.title}",
                 "Complete your student registration below\n"
-                "Then answer any event questions here to finish joining",
+                "Then answer the form questions here to finish",
             ).as_kwargs(),
         )
     if verified_student:
         if not await resume_survey(message, event_survey):
             await message.answer(
-                "You're all set! Scan the QR code to join, or use /help",
+                "You're all set! Scan a form QR code to continue, or use /help",
                 reply_markup=ReplyKeyboardRemove(),
             )
     elif await prompt_remaining_profile_fields(message, registration_repository):

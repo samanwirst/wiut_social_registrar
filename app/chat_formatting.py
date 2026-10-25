@@ -13,6 +13,10 @@ def card(title: str, body: str | Text) -> Text:
     return Text(Bold(title), "\n\n", body)
 
 
+def recipient_count(count: int) -> str:
+    return f"{count} recipient" if count == 1 else f"{count} recipients"
+
+
 def student_profile(
     student: Student, *, title="Your verified profile", education_level=None
 ) -> Text:
@@ -36,5 +40,9 @@ def student_profile(
 
 
 def event_confirmation(event, *, already=False) -> Text:
-    prefix = "You are already registered for: " if already else "You are registered for: "
+    prefix = (
+        "Your response has already been submitted for: "
+        if already
+        else "Your response has been submitted for: "
+    )
     return Text(prefix, Bold(event.title))

@@ -28,33 +28,33 @@ async def new_event(
                 "Complete registration first. Send /start, then your own student ID"
             )
         return
-    title = command.args if command and command.args else "New Event"
+    title = command.args if command and command.args else "New Form"
     try:
         event = await event_repository.create(message.from_user.id, title)
     except EventError as error:
         await message.answer(error_text(error))
         return
     text = Text(
-        Bold("Congratulations! Event created 🎉"),
+        Bold("Congratulations! Form created 🎉"),
         "\n\n",
         Bold(event.title),
-        "\n\nManage registration process from your event panel:\n",
-        "• Edit event details and add questions\n",
+        "\n\nManage everything from your organizer panel:\n",
+        "• Edit details, set your department and add questions\n",
         "• Get your QR code and invite link\n",
-        "• View participants and their answers\n\n",
+        "• Edit your table and message selected people\n\n",
     )
     rows = []
     if mini_app_url:
-        text += Text("Tap Manage event below to open the panel\nYou can return anytime with /panel")
+        text += Text("Tap Manage form below to open the panel\nYou can return anytime with /panel")
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Manage event", web_app=WebAppInfo(url=f"{mini_app_url}/?event={event.id}")
+                    text="Manage form", web_app=WebAppInfo(url=f"{mini_app_url}/?event={event.id}")
                 )
             ]
         )
     else:
-        text += Text("The event panel is currently unavailable. Your event has been saved")
+        text += Text("The organizer panel is currently unavailable. Your form has been saved")
     await message.answer(
         **text.as_kwargs(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
@@ -67,5 +67,5 @@ async def new_event(
 
 def create_router() -> Router:
     router = Router(name=__name__)
-    router.message.register(new_event, Command("new_event"))
+    router.message.register(new_event, Command("new_form", "new_event"))
     return router

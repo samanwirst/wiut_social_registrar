@@ -95,3 +95,20 @@ docker compose --env-file .env.example -f compose.yaml -f compose.miniapp.local.
 Production/public HTTPS overrides additionally require placeholder or real deployment
 values for `POSTGRES_PASSWORD` and `MINI_APP_URL`. Do not print rendered configuration
 that contains real values. `config --quiet` validates without displaying those values.
+
+
+## Forms, table editing, and native broadcasts
+
+`tests/test_forms_tables_broadcasts.py` runs on isolated SQLite/PostgreSQL. It covers forms and
+departments, owner-only cell/column mutations, conflict rejection, immutable verified profiles,
+expiry after cleanup/retention extension, migration of existing profiles/answers, audience and
+confirmation idempotency, flood-wait budgets, interruption recovery, cancellation, and recipient
+retention. `test_forms_api.py` covers signed identity, other owners, tampering, and transport.
+`test_broadcast_chat.py` feeds real aiogram updates with synthetic plain/rich content and mocks
+all Bot API calls: preview, confirmation, and worker copies must use the exact saved message.
+Browser QA selects people on two pages, creates an audience, checks the native compose URL,
+edits number/choice cells, adds columns, changes the department, and opens a Finished link
+under People while drafts remain hidden. Repository/API checks cover filtered pagination,
+active-queue refresh metadata, owner-only sent-message links, exact sent copies, and original
+message reply references.
+Its Telegram SDK stub intercepts the handoff; no real Telegram page or message is used.

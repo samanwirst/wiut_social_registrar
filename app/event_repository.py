@@ -37,7 +37,7 @@ class EventRepository:
     async def require_organizer(self, user_id):
         return await self.events.require_organizer(user_id)
 
-    async def create(self, user_id, title="New Event"):
+    async def create(self, user_id, title="New Form"):
         return await self.events.create(user_id, title)
 
     async def settings(self, user_id, event_id):

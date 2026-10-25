@@ -7,7 +7,7 @@ def main_menu(mini_app_url="", *, can_open_panel=False) -> InlineKeyboardMarkup 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Event panel", web_app=WebAppInfo(url=mini_app_url)),
+                InlineKeyboardButton(text="Organizer panel", web_app=WebAppInfo(url=mini_app_url)),
             ]
         ]
     )

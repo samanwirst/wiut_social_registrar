@@ -277,7 +277,7 @@ async def test_graph_errors_do_not_expose_host_configuration(app):
 async def test_unknown_submission_keeps_code_valid_and_does_not_retry(app):
     app.registrar_service.send_verification_code.side_effect = SendStatusUnknown("Check Sent Items")
     replies = await send(app, "00000001")
-    assert "did not confirm" in replies[-1].text
+    assert "couldn't confirm" in replies[-1].text
     code = app.registrar_service.send_verification_code.await_args.args[1]
     replies = await send(app, code)
     assert "Your email is verified" in replies[-1].text
@@ -312,12 +312,12 @@ async def test_start_restores_real_email_status_without_claiming_a_failed_email_
     await app.registration_repository.mark_email(100, nonce, status)
     replies = await send(app, "/start")
     text = replies[-1].text
-    assert ("Microsoft accepted" in text) == (status == "accepted")
-    assert ("Open the Outlook mailbox" in text) == (status == "accepted")
+    assert ("Enter the 6-digit code from your university email" in text) == (status == "accepted")
+    assert ("The code expires in 10 minutes" in text) == (status == "accepted")
     if status == "failed":
         assert "couldn't send" in text
     elif status in {"unknown", "pending"}:
-        assert "did not confirm" in text
+        assert "couldn't confirm" in text
     app.registrar_service.send_verification_code.assert_not_awaited()
 
 
@@ -331,7 +331,7 @@ async def test_unconfirmed_submission_is_logged_and_reported_without_private_dat
     assert "private-token-and-code" not in caplog.text
     assert "email:SendStatusUnknown" in app.health.incidents
     replies = await send(app, "/start")
-    assert "did not confirm" in replies[-1].text
+    assert "couldn't confirm" in replies[-1].text
     assert app.registrar_service.send_verification_code.await_count == 1
 
 
@@ -472,7 +472,7 @@ async def test_repeated_contact_does_not_repeat_registration(app):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "command,title", [("/new_event", "New Event"), ("/new_event Welcome Night", "Welcome Night")]
+    "command,title", [("/new_event", "New Form"), ("/new_event Welcome Night", "Welcome Night")]
 )
 @pytest.mark.parametrize("mini_app_url", ["", "https://events.example.test"])
 async def test_new_event_sends_confirmation_without_registration_media(
@@ -483,7 +483,7 @@ async def test_new_event_sends_confirmation_without_registration_media(
     replies = await send(app, command)
     assert len(replies) == 1
     reply = replies[0]
-    assert title in reply.text and "Event created" in reply.text
+    assert title in reply.text and "Form created" in reply.text
     assert "https://t.me/" not in reply.text
     assert methods(app, SendPhoto) == []
     async with app.database.transaction() as session:
@@ -491,7 +491,7 @@ async def test_new_event_sends_confirmation_without_registration_media(
         assert event.title == title and event.creator_telegram_user_id == 100
     if mini_app_url:
         buttons = [button for row in reply.reply_markup.inline_keyboard for button in row]
-        assert len(buttons) == 1 and buttons[0].text == "Manage event"
+        assert len(buttons) == 1 and buttons[0].text == "Manage form"
         assert buttons[0].web_app.url == f"{mini_app_url}/?event={event.id}"
         assert buttons[0].url is None
     else:
@@ -527,9 +527,9 @@ async def test_event_link_enrolls_verified_student_once_without_graph_calls(app)
     event = await app.event_repository.create(100, "Student Meetup")
     app.registrar_service.reset_mock()
     replies = await send(app, f"/start event_{event.id}")
-    assert "You are registered for: Student Meetup" in replies[-1].text
+    assert "Your response has been submitted for: Student Meetup" in replies[-1].text
     replies = await send(app, f"/start event_{event.id}")
-    assert "already registered" in replies[-1].text
+    assert "already been submitted" in replies[-1].text
     async with app.database.transaction() as session:
         assert len(list(await session.scalars(select(EventRegistration)))) == 1
     app.registrar_service.find_student.assert_not_called()
@@ -542,7 +542,7 @@ async def test_second_event_link_replaces_first_during_student_registration_with
     event = await app.event_repository.create(100, "Freshers Welcome")
     second = await app.event_repository.create(100, "Second Event")
     replies = await send(app, f"/start event_{event.id}", user_id=200)
-    assert "Event saved: Freshers Welcome" in replies[0].text
+    assert "Form saved: Freshers Welcome" in replies[0].text
     assert "own student ID" in replies[-1].text
     app.registrar_service.find_student.return_value = Student(
         "00000002", "Second Student", "second@example.test", account="00000002@example.test"
@@ -720,7 +720,7 @@ async def test_event_survey_runs_in_chat_with_text_and_inline_mcq_before_enrollm
     )
     replies = await send(app, f"/start event_{event.id}")
     assert "Question 1/2" in replies[-1].text and "Your team?" in replies[-1].text
-    assert "30 days" in replies[-1].text
+    assert "30 days" not in replies[-1].text
     app.registrar_service.reset_mock()
     replies = await send(app, "My team")
     assert "Question 2/2" in replies[-1].text
@@ -728,7 +728,10 @@ async def test_event_survey_runs_in_chat_with_text_and_inline_mcq_before_enrollm
     assert [row[0].text for row in buttons] == ["Morning", "Evening"]
     assert (await app.event_repository.members(100, event.id)).total == 0
     await callback(app, buttons[1][0].callback_data)
-    assert methods(app, SendMessage)[-1].text == "You are registered for: Event with questions"
+    assert (
+        methods(app, SendMessage)[-1].text
+        == "Your response has been submitted for: Event with questions"
+    )
     page = await app.event_repository.answer_page(100, event.id)
     assert page.members[0]["answers"] == {
         event.questions[0]["id"]: "My team",
@@ -808,7 +811,10 @@ async def test_scanning_second_event_leaves_unfinished_first_questionnaire(app):
     await send(app, f"/start event_{first.id}")
     await send(app, "Partial answer for the first event")
     replies = await send(app, f"/start event_{second.id}")
-    assert "You are registered for" in replies[-1].text and second.title in replies[-1].text
+    assert (
+        "Your response has been submitted for" in replies[-1].text
+        and second.title in replies[-1].text
+    )
     assert not await app.event_survey.active(100)
     assert await app.event_repository.pending_titles(100) == []
     assert (await app.event_repository.members(100, first.id)).total == 0
@@ -831,7 +837,7 @@ async def test_removed_cancel_preserves_questionnaire_progress_and_verified_acco
     assert await app.registration_repository.verified(100)
     assert (await app.event_repository.members(100, event.id)).total == 0
     replies = await send(app, "Final answer")
-    assert "You are registered for" in replies[-1].text
+    assert "Your response has been submitted for" in replies[-1].text
     assert (await app.event_repository.members(100, event.id)).total == 1
 
 
@@ -843,7 +849,7 @@ async def test_panel_and_event_management_buttons_open_mini_app_only_for_organiz
     replies = await register(app)
     assert replies[-1].reply_markup is None
     replies = await send(app, "/panel")
-    assert "/new_event" in replies[-1].text and replies[-1].reply_markup is None
+    assert "/new_form" in replies[-1].text and replies[-1].reply_markup is None
     replies = await send(app, "/start")
     assert len(replies) == 1
     assert isinstance(replies[0].reply_markup, ReplyKeyboardRemove)
@@ -851,7 +857,7 @@ async def test_panel_and_event_management_buttons_open_mini_app_only_for_organiz
     assert "/panel" not in replies[-1].text
     replies = await send(app, "/new_event Welcome")
     button = replies[-1].reply_markup.inline_keyboard[-1][0]
-    assert button.text == "Manage event" and button.web_app.url.startswith(
+    assert button.text == "Manage form" and button.web_app.url.startswith(
         app.dp["mini_app_url"] + "/?event="
     )
     replies = await send(app, "/panel")
@@ -897,7 +903,7 @@ async def test_joining_an_event_does_not_unlock_the_mini_app(app):
     )
     await register(app, user_id=200)
     replies = await send(app, f"/start event_{event.id}", user_id=200)
-    assert "You are registered for" in replies[-1].text
+    assert "Your response has been submitted for" in replies[-1].text
     assert replies[-1].reply_markup is None
     replies = await send(
         app,
@@ -906,7 +912,7 @@ async def test_joining_an_event_does_not_unlock_the_mini_app(app):
     )
     assert replies[-1].reply_markup is None
     replies = await send(app, "/panel", user_id=200)
-    assert "/new_event" in replies[-1].text and replies[-1].reply_markup is None
+    assert "/new_form" in replies[-1].text and replies[-1].reply_markup is None
 
 
 @pytest.mark.asyncio
@@ -922,7 +928,9 @@ async def test_retired_event_buttons_replace_old_keyboard_with_panel_only(app, d
     app.registrar_service.reset_mock()
     await callback(app, data, photo=photo)
     keyboard = methods(app, EditMessageReplyMarkup)[-1].reply_markup
-    assert [button.text for row in keyboard.inline_keyboard for button in row] == ["Event panel"]
+    assert [button.text for row in keyboard.inline_keyboard for button in row] == [
+        "Organizer panel"
+    ]
     assert keyboard.inline_keyboard[0][0].web_app.url == app.dp["mini_app_url"]
     assert methods(app, SendRichMessage) == [] and methods(app, EditMessageText) == []
     app.event_repository.members.assert_not_called()
@@ -962,7 +970,7 @@ async def test_native_command_menu_follows_registration_and_event_creation(app):
     await register(app)
     current = methods(app, SetMyCommands)[-1]
     names = [item.command for item in current.commands]
-    assert {"new_event", "me"} <= set(names) and "resend" not in names and "panel" not in names
+    assert {"new_form", "me"} <= set(names) and "resend" not in names and "panel" not in names
     app.dp["mini_app_url"] = "https://events.example.test"
     await send(app, "/new_event Welcome")
     assert "panel" in [item.command for item in methods(app, SetMyCommands)[-1].commands]

@@ -18,3 +18,10 @@ export function CheckIcon() {
     <path d="m5 12 4 4L19 6" />
   </svg>;
 }
+
+export function CloseIcon() {
+  return <svg className="studio-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false">
+    <path d="m6 6 12 12M6 18 18 6" />
+  </svg>;
+}

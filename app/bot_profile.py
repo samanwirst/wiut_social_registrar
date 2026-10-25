@@ -16,11 +16,12 @@ from config import BotSettings
 from registrar.config import ConfigurationError
 
 NAME = "Social Registrar"
-ABOUT = "Students and event registration for WIUT. Verify once and join events easily\n\nBy students, for students\nLovely, WestDevs"
+ABOUT = "WIUT events, advisor applications and more\nVerify once, apply easily\n\nBy students, for students\nLovely, WestDevs"
 DESCRIPTION = (
-    "Join WIUT events in a few taps\n\n"
-    "Register once with your student ID, then scan an event's QR code or open an invite link to join\n\n"
-    "Hosting an event? \nUse /new_event with a name to create one and invite others!\n\n"
+    "WIUT opportunities in a few taps\n\n"
+    "Register once with your student ID, then scan a QR code or open a link to join an event or submit an application\n"
+    "Answer any questions right here in chat and you're all set\n\n"
+    "Tap Start to begin"
 )
 AVATAR = Path(__file__).parent / "assets" / "telegram-avatar.jpg"
 DESCRIPTION_PICTURE = Path(__file__).parent / "assets" / "telegram-description.png"

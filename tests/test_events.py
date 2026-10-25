@@ -39,7 +39,7 @@ async def test_event_requires_completed_registration_and_gets_unique_uuid(reposi
     await register(repository, 100)
     first = await events.create(100, "  Welcome   Night  ")
     second = await events.create(100)
-    assert first.title == "Welcome Night" and second.title == "New Event"
+    assert first.title == "Welcome Night" and second.title == "New Form"
     assert UUID(first.id).version == 4 and first.id != second.id
     async with repository.db.transaction() as session:
         assert (await session.get(Event, first.id)).creator_telegram_user_id == 100

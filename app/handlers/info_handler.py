@@ -14,11 +14,15 @@ async def cmd_info(message: Message) -> None:
         "\n",
         Italic("By students, for students"),
         "\n\n",
+        "Built for the WIUT community, Social Registrar brings event sign-ups and applications into Telegram\n\n",
         Bold("Your next campus moment"),
-        "\nVerify once, scan an invitation and join your next event\n"
-        "Answer event questions right here in chat\n\n",
+        "\n• Verify your student profile once, then open an invite link or scan a QR code\n"
+        "• Answer questions here in chat to join an event or apply to a club, team or campus opportunity\n\n",
         Bold("Bring people together"),
-        "\nCreate events, collect answers and manage participants in your event panel\n\n",
+        "\n• Create a form with /new_form and manage it in your organizer panel\n"
+        "• Add questions, edit responses and add your own table columns\n"
+        "• Message selected participants using Telegram formatting\n"
+        "• Share a QR code with a custom AI design and download it with a transparent or solid background\n\n",
         "Designed and developed by\n",
         TextLink("Mukhammadiev Samandar", url="https://t.me/samanwirst"),
         ", ",

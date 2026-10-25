@@ -38,10 +38,10 @@ class EventSettingsRepository:
             )
             if event_id is None:
                 raise EventError(
-                    "Create your first event with /new_event Event name to unlock the event panel."
+                    "Create your first form with /new_form Form name to unlock the organizer panel."
                 )
 
-    async def create(self, user_id, title="New Event") -> Event:
+    async def create(self, user_id, title="New Form") -> Event:
         title = event_title(title)
         async with self.db.transaction(write=True) as session:
             user = await session.scalar(
@@ -79,6 +79,8 @@ class EventSettingsRepository:
                 await shorten_answer_retention(session, event.id, retention)
             event.title = changes.title
             event.description = changes.description
+            if changes.department is not None:
+                event.department = changes.department
             event.registration_open = changes.registration_open
             event.response_retention_days = retention
             if event.questions != questions:

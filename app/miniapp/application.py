@@ -2,7 +2,9 @@
 
 from aiohttp import web
 
+from app.broadcasts import BroadcastRepository
 from app.events.qr_designs import EventQrDesigns
+from app.events.table import EventTable
 from app.services.qr_designer import QrDesigner
 
 from .assets import STATIC, STATIC_DIR, asset, health, ready
@@ -18,7 +20,8 @@ from .routes import (
     session_info,
     update_event,
 )
-from .state import BOT, HEALTH, QR_DESIGNER, REPOSITORY
+from .state import BOT, BROADCASTS, HEALTH, QR_DESIGNER, REPOSITORY, TABLE
+from .table_routes import broadcasts, cancel_broadcast, create_broadcast, edit_cell, table_columns
 
 
 def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runtime_health=None):
@@ -27,6 +30,8 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
     )
     app[REPOSITORY], app[BOT] = repository, bot
     app[STATIC_DIR] = static_dir
+    app[TABLE] = EventTable(repository.db, clock=repository.clock)
+    app[BROADCASTS] = BroadcastRepository(repository.db, clock=repository.clock)
     app[QR_DESIGNER] = qr_designer if qr_designer is not None else QrDesigner()
     if runtime_health is not None:
         app[HEALTH] = runtime_health
@@ -46,17 +51,30 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
             web.get("/", asset),
             web.get("/assets/{name}", asset),
             web.get("/api/session", session_info),
-            web.get("/api/events", list_events),
-            web.get("/api/events/{event_id}", get_event),
-            web.put("/api/events/{event_id}", update_event),
-            web.get("/api/events/{event_id}/members", event_members),
-            web.delete("/api/events/{event_id}/answers", delete_answers),
-            web.get("/api/events/{event_id}/qr", qr_code),
-            web.post("/api/events/{event_id}/qr/designs", create_design),
-            web.get("/api/events/{event_id}/qr/designs", selected_design),
-            web.delete("/api/events/{event_id}/qr/designs", reset_design),
-            web.get("/api/events/{event_id}/qr/designs/{job_id}", design_status),
-            web.get("/api/events/{event_id}/qr/designs/{job_id}/image", design_image),
         ]
     )
+    # Both resources share the same signed identity and ownership checks. Keep
+    # existing clients/invites working without duplicating transport behavior.
+    for resource in ("events", "forms"):
+        prefix = "/api/" + resource
+        app.add_routes(
+            [
+                web.get(prefix, list_events),
+                web.get(prefix + "/{event_id}", get_event),
+                web.put(prefix + "/{event_id}", update_event),
+                web.get(prefix + "/{event_id}/members", event_members),
+                web.delete(prefix + "/{event_id}/answers", delete_answers),
+                web.get(prefix + "/{event_id}/qr", qr_code),
+                web.post(prefix + "/{event_id}/qr/designs", create_design),
+                web.get(prefix + "/{event_id}/qr/designs", selected_design),
+                web.delete(prefix + "/{event_id}/qr/designs", reset_design),
+                web.get(prefix + "/{event_id}/qr/designs/{job_id}", design_status),
+                web.get(prefix + "/{event_id}/qr/designs/{job_id}/image", design_image),
+                web.put(prefix + "/{event_id}/columns", table_columns),
+                web.patch(prefix + "/{event_id}/members/{member_id}", edit_cell),
+                web.get(prefix + "/{event_id}/broadcasts", broadcasts),
+                web.post(prefix + "/{event_id}/broadcasts", create_broadcast),
+                web.post(prefix + "/{event_id}/broadcasts/{broadcast_id}/cancel", cancel_broadcast),
+            ]
+        )
     return app
