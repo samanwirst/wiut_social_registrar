@@ -12,11 +12,12 @@ import type { EventDetails, Notify } from './types';
 type Tab = 'overview' | 'questions' | 'participants' | 'qr';
 const tabs = ['overview', 'questions', 'participants', 'qr'] as const;
 
-export function EventEditor({ event, guard, notify, onSaved }: {
-  event: EventDetails; guard: MutableRefObject<() => boolean>; notify: Notify; onSaved: (event: EventDetails) => void;
+export function EventEditor({ event, guard, detailBack, notify, onSaved }: {
+  event: EventDetails; guard: MutableRefObject<() => boolean>; detailBack: MutableRefObject<(() => void) | null>; notify: Notify; onSaved: (event: EventDetails) => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
-  const { draft, dirty, saving, change, save } = useEventDraft(event, guard, onSaved, notify);
+  const [answerDirty, setAnswerDirty] = useState(false);
+  const { draft, dirty, saving, change, save } = useEventDraft(event, guard, onSaved, notify, answerDirty);
   const qrDesigner = useQrDesign(event.id);
 
   return <>
@@ -34,7 +35,7 @@ export function EventEditor({ event, guard, notify, onSaved }: {
         aria-controls="event-content" tabIndex={tab === value ? 0 : -1} disabled={saving} onClick={() => setTab(value)}>
         {value === 'qr' ? 'QR' : value === 'participants' ? 'People' : value[0].toUpperCase() + value.slice(1)}</TabsList.Item>)}</TabsList>
     <div id="event-content" role="tabpanel" aria-labelledby={`event-tab-${tab}`}>
-    {tab === 'participants' ? <Participants eventId={event.id} />
+    {tab === 'participants' ? <Participants eventId={event.id} detailBack={detailBack} onDirtyChange={setAnswerDirty} />
       : tab === 'qr' ? <EventShare event={event} designer={qrDesigner} notify={notify} />
       : <form className="event-form" onSubmit={save} aria-label="Form settings">
         {tab === 'overview' ? <List className="section-list editor-fields">

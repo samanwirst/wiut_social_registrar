@@ -9,7 +9,7 @@ import { Chevron } from './Icons';
 function Workspace() {
   const [notice, setNotice] = useState<{ message: string; error: boolean } | null>(null);
   const notify = useCallback((message: string, error = false) => setNotice({ message, error }), []);
-  const { event, events, loading, error, retry, guard, listPage, loadEvents, openEvent, onSaved } = useWorkspace(notify);
+  const { event, events, loading, error, retry, guard, detailBack, listPage, loadEvents, openEvent, onSaved } = useWorkspace(notify);
 
   return <>
     {event ? <header className="brandbar"><Button type="button" mode="plain" size="s" before={<Chevron direction="left" />} disabled={loading} onClick={() => { void loadEvents(listPage); }}>
@@ -17,7 +17,7 @@ function Workspace() {
     <main className="page" aria-busy={loading}>
       {error ? <Placeholder header="We couldn't open your workspace" description={error}
         action={<Button type="button" mode="bezeled" onClick={retry}>Try again</Button>} />
-        : event ? <fieldset className="editor-fieldset" disabled={loading}><EventEditor key={event.id} event={event} guard={guard} notify={notify} onSaved={onSaved} /></fieldset>
+        : event ? <fieldset className="editor-fieldset" disabled={loading}><EventEditor key={event.id} event={event} guard={guard} detailBack={detailBack} notify={notify} onSaved={onSaved} /></fieldset>
           : events ? <EventList data={events} busy={loading} onOpen={openEvent} onPage={page => { void loadEvents(page); }} />
             : <div className="loading" role="status"><Spinner size="l" /><span>Opening your workspace…</span></div>}
     </main>

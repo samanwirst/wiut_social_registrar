@@ -114,3 +114,6 @@ under People while drafts remain hidden. Repository/API checks cover filtered pa
 active-queue refresh metadata, owner-only sent-message links, exact sent copies, and original
 message reply references.
 Its Telegram SDK stub intercepts the handoff; no real Telegram page or message is used.
+`browser_answers.py` exercises three-line previews, literal full answers, native Back navigation,
+preserved pagination/selection/scroll, expanded text drafts, conflict recovery, duplicate-save
+protection, unsaved closing confirmation, and viewport resizing above the Save action.

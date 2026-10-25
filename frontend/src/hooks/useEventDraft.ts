@@ -5,12 +5,12 @@ import { supports, telegram } from '../telegram';
 import type { Event, EventDetails, Notify } from '../types';
 import { useUnsavedChanges } from './useUnsavedChanges';
 
-export function useEventDraft(event: EventDetails, guard: MutableRefObject<() => boolean>, onSaved: (event: EventDetails) => void, notify: Notify) {
+export function useEventDraft(event: EventDetails, guard: MutableRefObject<() => boolean>, onSaved: (event: EventDetails) => void, notify: Notify, nestedDirty = false) {
   const [draft, setDraft] = useState(() => structuredClone(event));
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  useUnsavedChanges(dirty, savingRef, guard);
+  useUnsavedChanges(dirty, savingRef, guard, nestedDirty);
 
   const change = (value: Partial<EventDetails>) => {
     setDraft(previous => ({ ...previous, ...value }));

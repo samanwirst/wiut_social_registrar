@@ -33,6 +33,7 @@ from app.repositories import RegistrationRepository
 from app.services.qr_art import QrDesignError, scan_verified
 from app.services.qr_designer import QrDesigner
 from registrar.models import Student
+from tests.browser_answers import answer_geometry, check_long_answers
 from tests.helpers import complete_student_registration, signed_init_data
 
 OUT = Path(tempfile.mkdtemp(prefix="wiut-miniapp-browser-"))
@@ -107,6 +108,20 @@ async def main():
             "required": True,
             "options": ["Product & design", "Software engineering"],
         }
+        text_q = {
+            "id": str(uuid4()),
+            "label": "Tell us about your experience",
+            "type": "text",
+            "required": True,
+            "options": [],
+        }
+        long_answer = (
+            "I helped organize student workshops, supported new volunteers, and planned practical activities. "
+            * 7
+            + "\n\nMy responsibilities included:\nRecruiting volunteers\nCoordinating the schedule\nCollecting feedback\n\n"
+            + "I want to bring those skills to future events and learn from the team. " * 5
+            + "\n\nLiteral text: <b>keep this as text</b> & student projects 🎓"
+        )
         career = await events.configure(
             100,
             career.id,
@@ -116,12 +131,20 @@ async def main():
                 "registration_open": True,
                 "revision": career.revision,
                 "response_retention_days": 30,
-                "questions": [q],
+                "questions": [q, text_q],
             },
         )
         for user_id in range(1000, 1012):
             await events.submit_form(
-                user_id, career.id, {q["id"]: [q["options"][user_id % 2]]}, career.revision
+                user_id,
+                career.id,
+                {
+                    q["id"]: [q["options"][user_id % 2]],
+                    text_q["id"]: long_answer
+                    if user_id in {1001, 1010, 1011}
+                    else "Student projects",
+                },
+                career.revision,
             )
         broadcasts = BroadcastRepository(db)
         sent_message = await broadcasts.create(100, career.id, [1000, 1010], str(uuid4()))
@@ -160,6 +183,7 @@ async def main():
         const listeners = new Map();
         window.Telegram = {WebApp: {
             initData: __INIT_DATA__, colorScheme: 'light', platform: 'android',
+            themeParams: {bg_color: '#ffffff'},
             ready(){}, expand(){}, isVersionAtLeast(){return true;},
             setHeaderColor(color){window.testHeaderColor=color;},
             setBackgroundColor(color){window.testBackgroundColor=color;},
@@ -171,12 +195,14 @@ async def main():
                 listeners.get(name).add(callback);
             },
             offEvent(name, callback) {listeners.get(name)?.delete(callback);},
-            enableClosingConfirmation(){}, disableClosingConfirmation(){},
+            enableClosingConfirmation(){window.testClosingConfirmation=true;},
+            disableClosingConfirmation(){window.testClosingConfirmation=false;},
             BackButton: {show(){}, hide(){}, onClick(callback){window.testBack = callback;}, offClick(){window.testBack = null;}},
             HapticFeedback: {notificationOccurred(){}}
         }};
         window.testTheme = (appearance) => {
             window.Telegram.WebApp.colorScheme = appearance;
+            window.Telegram.WebApp.themeParams.bg_color = appearance === 'dark' ? '#212121' : '#ffffff';
             listeners.get('themeChanged')?.forEach(callback => callback());
         };
         """.replace("__INIT_DATA__", json.dumps(signed_init_data()))
@@ -708,6 +734,7 @@ async def main():
                 saved_page = await events.answer_page(100, career.id, 1)
                 assert saved_page.members[0]["organizer_values"]
                 assert saved_page.members[0]["answers"][q["id"]] == ["Software engineering"]
+                await check_long_answers(page, events, career.id, text_q, long_answer, OUT)
                 assert await page.get_by_role("tab", name="Messages", exact=True).count() == 0
                 history = page.locator(".broadcast-history")
                 await history.get_by_text("1 finished", exact=True).wait_for()
@@ -748,7 +775,9 @@ async def main():
                 ), "Page overflows horizontally"
                 await page.get_by_role("tab", name="Questions", exact=True).click()
                 await page.get_by_text("Question 1 · Locked", exact=True).wait_for()
-                assert await page.get_by_label("Question", exact=True).is_disabled()
+                locked_questions = await page.get_by_label("Question", exact=True).all()
+                assert len(locked_questions) == 2
+                assert all([await question.is_disabled() for question in locked_questions])
                 assert await page.get_by_label("Option 1", exact=True).is_disabled()
                 assert await page.get_by_role("button", name="Add option", exact=True).count() == 0
                 await page.screenshot(path=str(OUT / "mobile-questions.png"), full_page=True)
@@ -932,6 +961,23 @@ async def main():
                             for width in (320, 900):
                                 await visual.set_viewport_size({"width": width, "height": 844})
                                 await assert_native_geometry(visual, platform)
+                            if view == "participants":
+                                await visual.get_by_role(
+                                    "button",
+                                    name=f"Read {text_q['label']} for Student 1001",
+                                    exact=True,
+                                ).click()
+                                for width in (320, 900):
+                                    await visual.set_viewport_size({"width": width, "height": 844})
+                                    await answer_geometry(visual)
+                                    await visual.screenshot(
+                                        path=str(
+                                            OUT / f"answer-{platform}-{appearance}-{width}.png"
+                                        ),
+                                        animations="disabled",
+                                    )
+                                await visual.evaluate("window.testBack()")
+                                await visual.get_by_role("dialog").wait_for(state="detached")
                 # Older clients keep their supported native colors and skip 7.10 methods.
                 legacy = await browser.new_context(viewport={"width": 390, "height": 844})
                 await legacy.route(
@@ -953,10 +999,19 @@ async def main():
                     await legacy_page.evaluate("window.testBackgroundColor") == "secondary_bg_color"
                 )
                 assert await legacy_page.evaluate("window.testBottomBarColor === undefined")
+                await legacy_page.get_by_role("button", name="Career Lab 2026").click()
+                await legacy_page.get_by_role("tab", name="People", exact=True).click()
+                await legacy_page.get_by_role(
+                    "button", name=f"Read {text_q['label']} for Student 1001", exact=True
+                ).click()
+                await legacy_page.get_by_role("dialog").wait_for()
+                await legacy_page.evaluate("window.testBack()")
+                await legacy_page.get_by_role("dialog").wait_for(state="detached")
+                await legacy_page.get_by_text("12 people · 10 per page", exact=True).wait_for()
                 await browser.close()
             assert not browser_errors, browser_errors
             print(
-                "Browser QA passed: QR export, MCQ forms, 10-row pagination, Android/iOS layouts, light/dark themes, safe areas, unsaved changes, native geometry and controls at 320/390/900px."
+                "Browser QA passed: full answers and guarded editing, QR export, MCQ forms, 10-row pagination, Android/iOS layouts, light/dark themes, safe areas, unsaved changes, native geometry and controls at 320/390/900px."
             )
             print("Synthetic screenshots:", OUT)
         finally:
