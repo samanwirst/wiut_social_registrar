@@ -6,7 +6,7 @@ import time
 from uuid import uuid4
 
 from monitoring.state import save_json
-from registrar.errors import AuthenticationError
+from registrar.errors import AuthenticationError, GraphError
 
 logger = logging.getLogger(__name__)
 OUTLOOK_TIMEOUT = 25
@@ -27,6 +27,7 @@ class RuntimeHealth:
         self.tasks = set()
         self.changed = asyncio.Event()
         self.outlook_call = None
+        self.outlook_failures = []
 
     def report(self, component, healthy, reason=""):
         self.components[component] = {"ok": healthy, "reason": reason, "checked_at": self.clock()}
@@ -51,7 +52,43 @@ class RuntimeHealth:
             "phase": self.phase,
             "components": dict(self.components),
             "incidents": dict(self.incidents),
+            "outlook_failures": [dict(failure) for failure in self.outlook_failures],
         }
+
+    def _outlook_result(self, error=None):
+        """Keep a bounded outage history after recovery, with fixed diagnostic metadata."""
+        previous = self.components.get("outlook", {})
+        now = self.clock()
+        if error is not None:
+            if isinstance(error, AuthenticationError) and not error.network_error:
+                reason = "Sign-in required: run cli.py --login on this host"
+            elif isinstance(error, GraphError):
+                reason = error.diagnostic
+            else:
+                reason = type(error).__name__
+            if not self.outlook_failures or previous.get("ok") is not False:
+                self.outlook_failures.append(
+                    {
+                        "started_at": now,
+                        "last_failed_at": now,
+                        "reason": reason,
+                        "checks_failed": 0,
+                        "recovered_at": None,
+                    }
+                )
+                self.outlook_failures = self.outlook_failures[-16:]
+            failure = self.outlook_failures[-1]
+            failure.update(
+                last_failed_at=now, reason=reason, checks_failed=failure["checks_failed"] + 1
+            )
+            if previous.get("ok") is not False or previous.get("reason") != reason:
+                logger.warning("Outlook probe failed (%s)", reason)
+            self.report("outlook", False, reason)
+        else:
+            if previous.get("ok") is False and self.outlook_failures:
+                self.outlook_failures[-1]["recovered_at"] = now
+                logger.info("Outlook probe recovered")
+            self.report("outlook", True)
 
     async def start(self):
         if self.tasks:
@@ -98,14 +135,11 @@ class RuntimeHealth:
                     self.outlook_call = asyncio.create_task(self.registrar.check_connection())
                 await asyncio.wait_for(asyncio.shield(self.outlook_call), timeout=OUTLOOK_TIMEOUT)
                 self.outlook_call = None
-                self.report("outlook", True)
-            except AuthenticationError:
-                self.outlook_call = None
-                self.report("outlook", False, "Sign-in required: run cli.py --login on this host")
+                self._outlook_result()
             except Exception as error:
                 if self.outlook_call.done():
                     self.outlook_call = None
-                self.report("outlook", False, type(error).__name__)
+                self._outlook_result(error)
             await asyncio.sleep(
                 OUTLOOK_RETRY if not self.components["outlook"]["ok"] else OUTLOOK_INTERVAL
             )

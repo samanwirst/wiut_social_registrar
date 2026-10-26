@@ -6,6 +6,7 @@ import msal
 import requests
 
 from .config import Settings
+from .diagnostics import network_error_kind
 from .errors import AuthenticationError
 
 SCOPES = ["User.Read", "User.ReadBasic.All", "Mail.Send"]
@@ -81,9 +82,11 @@ class TokenProvider:
                     "Sign-in failed or permissions were not granted. Run cli.py --login again."
                 )
             return result["access_token"]
-        except requests.RequestException:
+        except requests.RequestException as error:
             raise AuthenticationError(
-                "Could not connect to the Microsoft sign-in service."
+                "Could not connect to the Microsoft sign-in service.",
+                network_error=network_error_kind(error),
+                service="sign-in",
             ) from None
         finally:
             self._save()
@@ -97,7 +100,11 @@ class TokenProvider:
             if not result or "access_token" not in result:
                 raise AuthenticationError("Your Microsoft session has expired. Run cli.py --login.")
             return result["access_token"]
-        except requests.RequestException:
-            raise AuthenticationError("Could not refresh your Microsoft session.") from None
+        except requests.RequestException as error:
+            raise AuthenticationError(
+                "Could not refresh your Microsoft session.",
+                network_error=network_error_kind(error),
+                service="sign-in",
+            ) from None
         finally:
             self._save()

@@ -85,12 +85,15 @@ def test_noninteractive_auth_never_starts_device_flow(provider):
     status.assert_not_called()
 
 
-def test_auth_network_failure_hides_transport_details(provider):
+@pytest.mark.parametrize("refresh", [False, True])
+def test_auth_network_failure_hides_transport_details(provider, refresh):
     auth, app, _ = provider
     app.acquire_token_silent.side_effect = requests.ConnectionError("secret-in-url")
     with pytest.raises(AuthenticationError) as error:
-        auth.login()
+        auth.get_token(refresh=refresh)
     assert "secret-in-url" not in str(error.value)
+    assert error.value.diagnostic == "AuthenticationError: Microsoft sign-in ConnectionError"
+    app.initiate_device_flow.assert_not_called()
 
 
 def test_cache_only_written_to_private_env(tmp_path):

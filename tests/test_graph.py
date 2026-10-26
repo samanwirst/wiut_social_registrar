@@ -95,6 +95,7 @@ def test_lookup_error_is_not_not_found(client, status):
     with pytest.raises(GraphError, match=f"HTTP {status}") as error:
         client.find_student("00000001")
     assert "private-response" not in str(error.value)
+    assert error.value.diagnostic == f"GraphError: HTTP {status}"
 
 
 @pytest.mark.parametrize(
@@ -178,6 +179,56 @@ def test_ambiguous_send_is_never_retried(client, failure):
         client.send_email(student, "Subject", "Body")
     assert client.session.request.call_count == 1
     assert "private-token" not in str(error.value)
+    if isinstance(failure, requests.Timeout):
+        assert error.value.diagnostic == "SendStatusUnknown: Microsoft Graph Timeout"
+    else:
+        assert error.value.diagnostic == f"SendStatusUnknown: HTTP {failure.status_code}"
+
+
+@pytest.mark.parametrize(
+    "failure,kind",
+    [
+        (requests.ConnectTimeout, "ConnectTimeout"),
+        (requests.ReadTimeout, "ReadTimeout"),
+        (requests.Timeout, "Timeout"),
+        (requests.exceptions.SSLError, "SSLError"),
+        (requests.exceptions.ProxyError, "ProxyError"),
+        (requests.ConnectionError, "ConnectionError"),
+        (requests.RequestException, "RequestException"),
+    ],
+)
+def test_network_diagnostics_preserve_only_fixed_categories_without_retry(client, failure, kind):
+    client.session.request.side_effect = failure("https://private.test?token=private-access-token")
+    with pytest.raises(GraphError) as error:
+        client.profile()
+    assert error.value.diagnostic == f"GraphError: Microsoft Graph {kind}"
+    assert "private" not in str(error.value) + error.value.diagnostic
+    client.session.request.assert_called_once()
+
+
+def test_diagnostic_metadata_never_echoes_arbitrary_values():
+    error = GraphError(
+        "private-message",
+        status_code="403 private-status",
+        network_error="private-category",
+        service="private-service",
+    )
+    assert error.diagnostic == "GraphError"
+    assert GraphError("private", status_code=True).diagnostic == "GraphError"
+    assert GraphError("private", status_code=600).diagnostic == "GraphError"
+
+
+def test_http_diagnostic_ignores_remote_codes_bodies_and_headers(client):
+    client.session.request.side_effect = [
+        response(
+            403,
+            {"error": {"code": "private-secret-code", "message": "private-token-and-email"}},
+            {"request-id": "private-id"},
+        )
+    ]
+    with pytest.raises(GraphError) as error:
+        client.profile()
+    assert error.value.diagnostic == "GraphError: HTTP 403"
 
 
 @pytest.mark.parametrize("status", [403, 429])

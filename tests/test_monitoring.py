@@ -60,67 +60,219 @@ def test_operational_state_is_private_atomic_and_recovers_from_bad_json(tmp_path
     assert len(list(tmp_path.iterdir())) == 1
 
 
-def test_failure_and_recovery_survive_process_restarts_without_repeated_alerts(tmp_path):
-    state, calls = {}, []
+def check_alerts(state, issues, now, send, recipients=(100,)):
+    watchdog.observe(state, issues, recipients, now=now, name="Test")
+    watchdog.deliver(state, send, now=now)
 
-    def send(recipient, text):
-        calls.append((recipient, text))
-        return True
 
-    watchdog.observe(state, {"database": "Database unavailable"}, (100,), now=1000, name="Test")
-    watchdog.deliver(state, send, now=1000)
+def test_failure_and_stable_recovery_survive_monitor_restarts_without_repeated_alerts(tmp_path):
+    state, send = {}, Mock(return_value=True)
+    issues = {"database": "Database unavailable"}
+    check_alerts(state, issues, 1000, send)
+    assert not send.called
     path = tmp_path / "state.json"
     save_json(path, state)
     state = read_json(path)
-    watchdog.observe(state, {"database": "Database unavailable"}, (100,), now=1010, name="Test")
-    watchdog.deliver(state, send, now=1010)
-    assert len(calls) == 1
-    watchdog.observe(state, {}, (100,), now=1020, name="Test")
-    watchdog.deliver(state, send, now=1020)
-    assert len(calls) == 2
-    assert "Alert:" in calls[0][1] and "Recovered:" in calls[1][1]
-    assert {recipient for recipient, _ in calls} == {100}
+    check_alerts(state, issues, 1030, send)
+    assert send.call_count == 1
+    check_alerts(state, {}, 1040, send)
+    check_alerts(state, {}, 1099, send)
+    assert send.call_count == 1
+    save_json(path, state)
+    state = read_json(path)
+    check_alerts(state, {}, 1100, send)
+    check_alerts(state, {}, 1120, send)
+    assert send.call_count == 2
+    assert "Alert:" in send.call_args_list[0].args[1]
+    assert "Recovered:" in send.call_args_list[1].args[1]
 
 
-def test_quiet_error_window_does_not_falsely_claim_email_delivery_recovered():
-    state = {}
-    watchdog.observe(state, {"email:GraphError": "Email failed"}, (100,), now=1000, name="Test")
-    watchdog.observe(state, {}, (100,), now=1070, name="Test")
-    message = state["records"]["email:GraphError"]["pending"][-1]["text"]
-    assert "No new application errors" in message
-    assert "working again" not in message
+@pytest.mark.parametrize(
+    "key",
+    [
+        "application",
+        "restart",
+        "email",
+        "email:GraphError",
+        "handler:RuntimeError",
+        "qr:ValueError",
+    ],
+)
+def test_isolated_application_errors_and_restarts_never_page_or_claim_recovery(key):
+    state, send = {}, Mock(return_value=True)
+    for now in range(1000, 2000, 10):
+        check_alerts(state, {key: "Diagnostic only"}, now, send)
+    check_alerts(state, {}, 2100, send)
+    assert not send.called
 
 
-def test_failed_delivery_is_queued_with_backoff_and_removed_admins_are_not_contacted():
+def test_repeated_brief_outlook_failures_never_page_or_accumulate_confirmation_time():
+    state, send = {}, Mock(return_value=True)
+    for start in (1000, 1500, 2000):
+        for now in range(start, start + 60, 10):
+            check_alerts(state, {"outlook": "Outlook: GraphError"}, now, send)
+        check_alerts(state, {}, start + 60, send)
+    assert not send.called
+
+
+@pytest.mark.parametrize(
+    ("key", "duration"),
+    [
+        ("outlook", 180),
+        ("broadcasts", 180),
+        ("cleanup", 180),
+        ("supervisor", 180),
+        ("backup", 300),
+        ("disk", 300),
+        ("tls", 300),
+    ],
+)
+def test_dependency_and_operational_failures_have_independent_confirmation_windows(key, duration):
+    state, send = {}, Mock(return_value=True)
+    for now in range(1000, 1000 + duration, 10):
+        check_alerts(state, {key: "Unavailable"}, now, send)
+    assert not send.called
+    check_alerts(state, {key: "Unavailable"}, 1000 + duration, send)
+    assert send.call_count == 1
+
+
+def test_outlook_requires_three_minutes_and_does_not_remind_or_flap():
+    state, send = {}, Mock(return_value=True)
+    issues = {"outlook": "Outlook: HTTP 503"}
+    for now in range(1000, 1180, 10):
+        check_alerts(state, issues, now, send)
+    assert not send.called
+    check_alerts(state, issues, 1180, send)
+    assert send.call_count == 1
+    for now in range(1190, 3000, 10):
+        check_alerts(state, issues, now, send)
+    assert send.call_count == 1
+    check_alerts(state, {}, 3000, send)
+    check_alerts(state, {}, 3050, send)
+    check_alerts(state, issues, 3060, send)
+    check_alerts(state, {}, 3070, send)
+    check_alerts(state, {}, 3130, send)
+    assert send.call_count == 2
+    check_alerts(state, issues, 3140, send)
+    for now in range(3150, 3321, 10):
+        check_alerts(state, issues, now, send)
+    assert send.call_count == 3  # A new confirmed outage after stable recovery.
+
+
+def test_related_service_symptoms_produce_one_alert_and_wait_for_all_to_recover():
+    state, send = {}, Mock(return_value=True)
+    issues = {"http": "HTTP unavailable", "database": "Database unavailable", "heartbeat": "Stale"}
+    check_alerts(state, issues, 1000, send)
+    check_alerts(state, issues, 1030, send)
+    assert send.call_count == 1
+    assert "Database unavailable" in send.call_args.args[1]
+    check_alerts(state, {"http": "HTTP unavailable"}, 1040, send)
+    check_alerts(state, {"polling": "Polling unavailable"}, 1120, send)
+    assert send.call_count == 1
+    check_alerts(state, {}, 1130, send)
+    check_alerts(state, {}, 1190, send)
+    assert send.call_count == 2
+
+
+def test_recovered_unsent_outage_is_not_replayed_when_telegram_returns():
     state, send = {}, Mock(return_value=False)
-    watchdog.observe(state, {"http": "Unavailable"}, (100, 200), now=1000, name="Test")
-    watchdog.deliver(state, send, now=1000)
-    assert state["next_delivery"] == 1020
-    watchdog.deliver(state, send, now=1010)
-    assert send.call_count == 2
-    watchdog.observe(state, {}, (200,), now=1010, name="Test")
+    check_alerts(state, {"http": "Unavailable"}, 1000, send)
+    check_alerts(state, {"http": "Unavailable"}, 1030, send)
+    assert send.call_count == 1
     send.reset_mock(return_value=True)
-    watchdog.deliver(state, send, now=1020)
-    assert send.call_count == 2
-    assert all(call.args[0] == 200 for call in send.call_args_list)
-    assert not state["records"]["http"]["pending"]
+    check_alerts(state, {}, 1040, send)
+    check_alerts(state, {}, 1100, send)
+    assert not send.called
+    assert not state["records"]["availability"]["pending"]
 
 
-def test_continuing_incident_has_a_fifteen_minute_reminder_and_delivery_is_bounded():
+def test_delivery_backoff_and_recovery_only_for_admins_who_received_the_alert():
+    state, send = {}, Mock(side_effect=lambda recipient, text: recipient == 100)
+    issues = {"http": "Unavailable"}
+    check_alerts(state, issues, 1000, send, (100, 200, 300))
+    check_alerts(state, issues, 1030, send, (100, 200, 300))
+    assert send.call_count == 3
+    assert state["next_delivery"] == 1050
+    check_alerts(state, issues, 1040, send, (100, 200))
+    assert send.call_count == 3
+    check_alerts(state, {}, 1050, send, (100, 200))
+    check_alerts(state, {}, 1110, send, (100, 200))
+    assert send.call_count == 4
+    assert send.call_args.args[0] == 100
+    assert "Recovered:" in send.call_args.args[1]
+    assert not state["records"]["availability"]["pending"]
+
+
+def test_removed_admins_are_not_contacted_and_delivery_is_bounded():
+    state, send = {}, Mock(return_value=False)
+    issues = {"http": "Unavailable"}
+    check_alerts(state, issues, 1000, send, tuple(range(1, 21)))
+    check_alerts(state, issues, 1030, send, tuple(range(1, 21)))
+    assert send.call_count == 3
+    send.reset_mock(return_value=True)
+    check_alerts(state, issues, 1050, send, (20,))
+    assert send.call_count == 1
+    assert send.call_args.args[0] == 20
+
+
+def test_unobserved_time_cannot_confirm_an_outage_or_recovery():
     state, send = {}, Mock(return_value=True)
     issues = {"http": "Unavailable"}
-    for now in (1000, 1100, 1899, 1900):
-        watchdog.observe(state, issues, (100,), now=now, name="Test")
-        watchdog.deliver(state, send, now=now)
+    check_alerts(state, issues, 1000, send)
+    check_alerts(state, issues, 2000, send)
+    assert not send.called
+    check_alerts(state, issues, 2030, send)
+    assert send.call_count == 1
+    check_alerts(state, {}, 2040, send)
+    check_alerts(state, {}, 3000, send)
+    assert send.call_count == 1
+    check_alerts(state, {}, 3060, send)
     assert send.call_count == 2
-    for _ in range(100):
-        watchdog.observe(state, issues, (100,), now=1901, name="Test")
-    assert len(state["records"]["http"]["pending"]) <= 2
-    state = {}
-    watchdog.observe(state, issues, tuple(range(1, 21)), now=1000, name="Test")
-    send.reset_mock()
-    watchdog.deliver(state, send, now=1000)
-    assert send.call_count == 3
+
+
+def test_old_policy_discards_stale_spam_without_resetting_repair_budget():
+    state = {
+        "records": {
+            "application": {"open": False, "pending": [{"text": "Old alert", "remaining": [100]}]}
+        },
+        "repairs": [900],
+        "container": "a" * 64,
+        "next_delivery": 2000,
+    }
+    send = Mock(return_value=True)
+    check_alerts(state, {}, 1000, send)
+    assert not send.called
+    assert state["records"] == {}
+    assert state["repairs"] == [900] and state["container"] == "a" * 64
+
+
+def test_dependency_alerts_and_recoveries_are_suppressed_during_service_outage():
+    state, send = {}, Mock(return_value=True)
+    issues = {"outlook": "Outlook unavailable"}
+    for now in range(1000, 1181, 10):
+        check_alerts(state, issues, now, send)
+    assert send.call_count == 1
+    for now in range(1190, 1500, 10):
+        check_alerts(state, {"http": "Unavailable"}, now, send)
+    assert send.call_count == 2
+    assert all("Recovered:" not in call.args[1] for call in send.call_args_list)
+    check_alerts(state, {}, 1500, send)
+    check_alerts(state, {}, 1560, send)
+    assert send.call_count == 4
+
+
+def test_incomplete_probes_cannot_confirm_failures_or_recoveries():
+    state, send = {}, Mock(return_value=True)
+    for now in range(1000, 1181, 10):
+        check_alerts(state, {"outlook": "Unavailable"}, now, send)
+    for now in range(1190, 1370, 10):
+        watchdog.observe(
+            state, {"supervisor": "Probe failed"}, (100,), now=now, name="Test", complete=False
+        )
+        watchdog.deliver(state, send, now=now)
+    assert send.call_count == 1
+    assert state["records"]["outlook"]["open"]
+    assert all("Recovered:" not in call.args[1] for call in send.call_args_list)
 
 
 def test_telegram_notifier_preserves_trusted_hostname_while_pinning_only_tcp(monkeypatch):
@@ -283,8 +435,12 @@ def test_legacy_production_probe_is_scoped_and_sends_only_fixed_error_categories
 def test_main_preserves_incidents_when_a_monitor_probe_itself_fails(tmp_path, monkeypatch):
     path = tmp_path / ".bot-watchdog.json"
     state = {}
-    watchdog.observe(state, {"outlook": "Unavailable"}, (100,), now=1000, name="Test")
+    initial_send = Mock(return_value=True)
+    for now in (1000, 1090, 1180):
+        check_alerts(state, {"outlook": "Unavailable"}, now, initial_send)
+    assert initial_send.call_count == 1
     save_json(path, state)
+    monkeypatch.setattr(watchdog.time, "time", lambda: 1190)
     monkeypatch.setenv("BOT_ADMIN_IDS", "[100]")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_TOKEN)
     monkeypatch.setattr(watchdog, "collect", Mock(side_effect=RuntimeError("private-probe-error")))
@@ -292,4 +448,4 @@ def test_main_preserves_incidents_when_a_monitor_probe_itself_fails(tmp_path, mo
     monkeypatch.setattr(watchdog, "send_alert", send)
     assert watchdog.main(["--env-dir", str(tmp_path)]) == 0
     assert read_json(path)["records"]["outlook"]["open"]
-    assert not any("Recovered" in call.args[2] for call in send.call_args_list)
+    assert not send.called

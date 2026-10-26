@@ -19,7 +19,7 @@ class RegistrationService:
         try:
             student = await self.registrar.find_student(student_id, refresh=True)
         except GraphError as error:
-            logger.warning("Registration lookup unavailable (%s)", type(error).__name__)
+            logger.warning("Registration lookup unavailable (%s)", error.diagnostic)
             if self.health:
                 self.health.incident("email", error)
             raise
@@ -35,13 +35,13 @@ class RegistrationService:
                 student, code, self.repository.CODE_TTL_SECONDS
             )
         except SendStatusUnknown as error:
-            logger.warning("Verification email submission unconfirmed (%s)", type(error).__name__)
+            logger.warning("Verification email submission unconfirmed (%s)", error.diagnostic)
             if self.health:
                 self.health.incident("email", error)
             await self.repository.mark_email(user_id, nonce, "unknown")
             return "unknown"
         except GraphError as error:
-            logger.warning("Verification email submission failed (%s)", type(error).__name__)
+            logger.warning("Verification email submission failed (%s)", error.diagnostic)
             if self.health:
                 self.health.incident("email", error)
             await self.repository.mark_email(user_id, nonce, "failed")

@@ -20,9 +20,15 @@ questionnaires/answers, Mini App authorization, API serialization, pagination, a
 behavior. Lifecycle regressions cover retention retry/cancellation and cleanup after failures.
 Monitoring regressions inject Outlook expiry/timeouts, failed email submissions, polling
 failures/recovery, stale heartbeats, supervisor probe failures, and ambiguous restart attempts.
+Outlook diagnostics checks cover fixed network categories, HTTP status metadata, sign-in
+network failures, bounded recovery history, and prevention of sensitive data in alerts/logs.
 All Bot API, Docker, and systemd transports in those tests are mocked; operational setup alerts
 are an explicit manual action outside pytest. Tests verify private atomic state, recipient
 allowlists, notification deduplication/backoff, bounded repair, and status-aware `/start` resume.
+Notification-policy checks cover transient error suppression, confirmed outages, grouped
+availability symptoms, dependency inhibition, stable recovery, per-recipient delivery tracking,
+obsolete queue removal, removed administrators, monitor gaps/incomplete probes, and migration
+from the previous notification policy without resetting the automatic-restart budget.
 
 ## PostgreSQL
 

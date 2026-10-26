@@ -324,10 +324,11 @@ async def test_start_restores_real_email_status_without_claiming_a_failed_email_
 @pytest.mark.asyncio
 async def test_unconfirmed_submission_is_logged_and_reported_without_private_data(app, caplog):
     app.registrar_service.send_verification_code.side_effect = SendStatusUnknown(
-        "private-token-and-code"
+        "private-token-and-code", status_code=503
     )
     await send(app, "00000001")
     assert "submission unconfirmed" in caplog.text
+    assert "SendStatusUnknown: HTTP 503" in caplog.text
     assert "private-token-and-code" not in caplog.text
     assert "email:SendStatusUnknown" in app.health.incidents
     replies = await send(app, "/start")
