@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from monitoring.alerts import deliver, observe
 from monitoring.state import admin_ids, read_json, save_json
 from monitoring.telegram import send_alert
 
@@ -183,59 +184,6 @@ def collect(args, previous, *, now):
     return issues, metadata, can_repair
 
 
-def observe(state, issues, recipients, *, now, name):
-    records = state.setdefault("records", {})
-    for key in set(records) | set(issues):
-        record = records.setdefault(key, {"open": False, "sent_at": 0, "pending": []})
-        bad = key in issues
-        changed = bad != record["open"]
-        if changed or bad and now - record["sent_at"] >= 900 and not record["pending"]:
-            title = "Alert" if bad else "Recovered"
-            if bad:
-                description = issues[key]
-            elif (
-                key.partition(":")[0]
-                in {"handler", "background", "fatal", "miniapp", "qr", "email", "broadcast"}
-                and ":" in key
-            ):
-                description = "No new application errors reported for 60 seconds (" + key + ")"
-            else:
-                description = key.capitalize() + " is working again"
-            message = f"Social Registrar · {name}\n{title}: {description}"
-            pending = {"text": message, "remaining": list(recipients)}
-            # Retain an unsent failure and the latest recovery without accumulating
-            # hours of repeated messages during a Telegram/network outage.
-            record["pending"] = (record["pending"][:1] + [pending])[-2:]
-            record["sent_at"] = now
-        record["open"] = bad
-        for pending in record["pending"]:
-            pending["remaining"] = [value for value in pending["remaining"] if value in recipients]
-        record["pending"] = [pending for pending in record["pending"] if pending["remaining"]]
-    # Fixed component names plus bounded exception types; prune old closed incidents.
-    for key in list(records):
-        if not records[key]["open"] and not records[key]["pending"] and len(records) > 64:
-            del records[key]
-
-
-def deliver(state, send, *, now):
-    if now < state.get("next_delivery", 0):
-        return
-    failed = False
-    deliveries = []
-    for record in state.get("records", {}).values():
-        for pending in record["pending"]:
-            deliveries.extend((pending, recipient) for recipient in pending["remaining"])
-    for pending, recipient in deliveries[:3]:
-        if send(recipient, pending["text"]):
-            pending["remaining"].remove(recipient)
-        else:
-            failed = True
-    for record in state.get("records", {}).values():
-        record["pending"] = [item for item in record["pending"] if item["remaining"]]
-    state["delivery_failures"] = min(5, state.get("delivery_failures", 0) + 1) if failed else 0
-    state["next_delivery"] = now + min(300, 10 * 2 ** state["delivery_failures"]) if failed else now
-
-
 def repair(args, state, issues, can_repair, *, now, persist=lambda: None):
     failure = "heartbeat" in issues or "http" in issues
     state["failed_checks"] = state.get("failed_checks", 0) + 1 if failure else 0
@@ -314,7 +262,7 @@ def main(argv=None):
             results = [
                 send(
                     recipient,
-                    f"Social Registrar · {args.name}\nAdministrator monitoring is connected\nYou will receive failure and recovery alerts here",
+                    f"Social Registrar · {args.name}\nAdministrator monitoring is connected\nYou will receive confirmed outage alerts here",
                 )
                 for recipient in recipients
             ]
@@ -327,16 +275,14 @@ def main(argv=None):
         try:
             issues, metadata, can_repair = collect(args, state, now=now)
             state.update(metadata)
+            complete = True
         except Exception as error:
             issues, can_repair = (
                 {"supervisor": "Monitoring probe failed (" + type(error).__name__ + ")"},
                 False,
             )
-            # An incomplete probe is not evidence that existing incidents recovered.
-            for key, record in state.get("records", {}).items():
-                if record.get("open"):
-                    issues.setdefault(key, key.capitalize() + " remains unconfirmed")
-        observe(state, issues, recipients, now=now, name=args.name)
+            complete = False
+        observe(state, issues, recipients, now=now, name=args.name, complete=complete)
         save_json(path, state)
         deliver(state, send, now=now)
         save_json(path, state)

@@ -24,8 +24,22 @@ Stop this bot before interactive `cli.py --login`, then restart it to load the n
 
 The bot atomically publishes `.bot-health.json` beside its selected environment file every
 five seconds and when state changes. The private file contains only timestamps, component
-status, and exception class names, never student information, codes, prompts, raw exceptions,
-tokens, or database connection strings. Database probes have a five-second timeout. Cleanup
+status, and safe exception diagnostics, never student information, codes, prompts, raw exceptions,
+tokens, or database connection strings. Outlook errors distinguish HTTP status (for example,
+`GraphError: HTTP 503`) from fixed network categories such as `ReadTimeout`, `SSLError`, and
+`ConnectionError`. Microsoft sign-in network failures are identified separately and do not
+incorrectly request an interactive login. Remote error messages, codes, headers, URLs, and
+response bodies are never copied into operational diagnostics.
+Verification lookup/submission logs use the same metadata; accepted, failed, and
+unconfirmed email outcomes retain their existing behavior and retry policy.
+
+Outlook failure transitions and recovery are logged without raw exception details. The
+heartbeat also retains up to 16 Outlook outage records for the current process, including
+the first/last failed check, latest safe reason, failed-check count, and recovery time.
+Recovery no longer erases these records. Restarting the process starts a new in-memory
+history; existing project log retention still applies. Repeated identical failures do not
+emit another log line; notification thresholds below are independent of log verbosity.
+Database probes have a five-second timeout. Cleanup
 failures retry after at most 30 seconds instead of aborting startup; expired answers remain
 filtered on reads. HTTP `/health` remains liveness; `/ready` requires database and Telegram
 polling and deliberately excludes Outlook availability.
@@ -44,14 +58,37 @@ not poll Telegram or access Graph. Telegram delivery has a six-second timeout, p
 retry/backoff, a bounded queue, and at most three submissions per invocation. A network
 ambiguity can cause a duplicate alert, but never a duplicate verification email.
 
-It reports failures and recoveries and reminds administrators every 15 minutes about ongoing
-incidents. Checks include scoped bot/PostgreSQL/Caddy processes, unexpected restart counts,
-HTTP availability, heartbeat age (45 seconds), stalled polling (120 seconds), dependency
-failures, unexpected chat/HTTP/QR/email errors, public HTTPS, certificate expiry under 48 hours,
-disk space under 2 GiB, failed backup jobs, and a missing fresh backup after 30 hours.
-Older production images without a heartbeat use Docker, HTTP, and fixed error markers from
-this bot's logs. They do not acquire the newer in-process Outlook or polling probes until a
-separately authorized application release. Raw logs are never copied to notifications.
+Only confirmed, actionable failures interrupt administrators. Isolated `ERROR` log lines,
+chat/HTTP/QR/email exceptions, and a single automatic restart remain diagnostics, not pages.
+Checks still observe them without sending failure/recovery pairs.
+
+| Condition | Required observed failure duration |
+| --- | --- |
+| Bot/PostgreSQL/Caddy unavailable, database unavailable, liveness/public HTTPS failure, stalled heartbeat/polling | 30 seconds |
+| Outlook unavailable, broadcast/cleanup worker unavailable, monitoring probes failing | 3 minutes |
+| Missing/failed backup, disk space under 2 GiB, HTTPS certificate expiry under 48 hours | 5 minutes |
+
+Related availability symptoms share one incident, so a stopped bot does not produce separate
+HTTP, polling, and heartbeat messages. While service availability is failing, downstream
+Outlook/worker notifications and recoveries are suspended. Dependency status cannot be
+inferred from an unavailable service. The heartbeat becomes stale after 45 seconds and polling
+after 120 seconds; confirmation starts when the supervisor first observes the failed condition.
+Outlook's first probe can occur up to five minutes after the underlying failure, followed by
+one-minute retries. These are observation thresholds, not guarantees of end-to-end detection time.
+
+Each incident sends one alert with its observed reason and confirmation duration, without
+periodic reminders. Recovery requires 60 seconds of observed healthy state and goes only to
+administrators who successfully received the corresponding alert. Brief recoveries do not
+close an incident or trigger another alert. An unsent alert is discarded when its outage ends;
+a restored Telegram connection cannot replay obsolete failure/recovery pairs. Delivery retries
+remain bounded. Removed recipients are excluded from alerts and recoveries.
+
+Confirmation/delivery state survives supervisor invocations. A gap of over two minutes between
+checks resets confirmation timers; an incomplete probe cannot establish dependency failure or
+recovery. The notification-policy upgrade discards old queued spam without resetting container
+metadata or the persisted automatic-restart budget. Raw logs never enter notifications.
+Older production images without a heartbeat still use Docker/HTTP availability; in-process
+Outlook/polling probes require an application release.
 
 Docker and the existing local service restart crashed processes. If an otherwise running bot
 fails liveness/heartbeat checks three times, the supervisor may restart **only that bot**,
@@ -122,4 +159,6 @@ tokens into shell arguments. The supervisor never sends test alerts automaticall
 Official references: [systemd timers](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html),
 [Telegram sendMessage](https://core.telegram.org/bots/api#sendmessage),
 [Microsoft sendMail and HTTP 202](https://learn.microsoft.com/en-us/graph/api/user-sendmail),
+[Google SRE monitoring](https://sre.google/sre-book/monitoring-distributed-systems/),
+[Prometheus alert grouping and inhibition](https://prometheus.io/docs/alerting/latest/alertmanager/),
 and [Microsoft refresh token revocation](https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens).

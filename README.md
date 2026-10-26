@@ -14,7 +14,9 @@ That guide also covers the optional `REGISTRAR_TELEGRAM_API_IPV4` setting for a
 container-specific Telegram routing override when the server cannot reach its DNS-selected address.
 
 Administrator alerts, recovery behavior, and the independent supervisor are described in
-[monitoring.md](docs/monitoring.md). Normal startup tolerates unavailable Outlook;
+[monitoring.md](docs/monitoring.md). Alerts require confirmed outages; transient errors stay
+in diagnostics, and ongoing incidents do not send periodic reminders. Normal startup tolerates
+unavailable Outlook;
 `python main.py --check` still validates Telegram, the database, and Outlook strictly.
 
 ## Before you start

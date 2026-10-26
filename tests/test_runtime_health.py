@@ -15,7 +15,7 @@ from app.services.runtime_health import RuntimeHealth
 from config import BotSettings
 from monitoring.state import read_json
 from registrar.config import Settings
-from registrar.errors import AuthenticationError
+from registrar.errors import AuthenticationError, GraphError
 from tests.helpers import TEST_TOKEN
 
 
@@ -44,7 +44,112 @@ async def test_outlook_auth_failure_does_not_stop_heartbeat_or_database_and_can_
         await health.close()
     assert read_json(path)["phase"] == "stopped"
     assert "private-auth-token" not in path.read_text()
+    assert health.outlook_failures[-1]["reason"].startswith("Sign-in required")
+    assert health.outlook_failures[-1]["recovered_at"] is not None
     assert not health.tasks
+
+
+@pytest.mark.asyncio
+async def test_outlook_http_and_network_details_reach_alerts_and_survive_recovery(
+    tmp_path, monkeypatch, caplog
+):
+    from monitoring import watchdog
+    from tests.test_monitoring import arguments
+
+    monkeypatch.setattr(runtime_health, "OUTLOOK_RETRY", 0.001)
+    monkeypatch.setattr(watchdog, "health_url", lambda *a, **k: True)
+    now = [1000]
+    failures = iter(
+        [
+            GraphError("private-body-token", status_code=503),
+            GraphError("private-body-token", status_code=503),
+            AuthenticationError("private-auth-url", network_error="ReadTimeout", service="sign-in"),
+            None,
+        ]
+    )
+    observed = []
+
+    async def check():
+        now[0] += 10
+        if error := next(failures):
+            raise error
+
+    registrar = SimpleNamespace(check_connection=AsyncMock(side_effect=check))
+    path = tmp_path / ".bot-health.json"
+    health = RuntimeHealth(AsyncMock(), registrar, path, clock=lambda: now[0])
+    original_report = health.report
+
+    def record(component, ok, reason=""):
+        original_report(component, ok, reason)
+        if component == "outlook":
+            observed.append(reason)
+
+    monkeypatch.setattr(health, "report", record)
+    try:
+        with caplog.at_level("INFO", logger="app.services.runtime_health"):
+            await health.start()
+            await until(lambda: health.components.get("outlook", {}).get("ok"))
+    finally:
+        await health.close()
+    assert observed == [
+        "GraphError: HTTP 503",
+        "GraphError: HTTP 503",
+        "AuthenticationError: Microsoft sign-in ReadTimeout",
+        "",
+    ]
+    saved = read_json(path)
+    assert saved["outlook_failures"] == [
+        {
+            "started_at": 1010,
+            "last_failed_at": 1030,
+            "reason": "AuthenticationError: Microsoft sign-in ReadTimeout",
+            "checks_failed": 3,
+            "recovered_at": 1040,
+        }
+    ]
+    assert caplog.text.count("Outlook probe failed") == 2
+    assert "Outlook probe recovered" in caplog.text
+    assert "private" not in path.read_text() + caplog.text
+    assert saved["components"]["outlook"]["ok"]
+    # The deployed host monitor accepts the richer reason without any host-package change.
+    saved["phase"] = "running"
+    saved["components"]["outlook"] = {"ok": False, "reason": observed[2]}
+    from monitoring.state import save_json
+
+    save_json(path, saved)
+    issues, _, _ = watchdog.collect(arguments(tmp_path, runtime=True), {}, now=1040)
+    assert issues["outlook"] == "Outlook: " + observed[2]
+
+
+@pytest.mark.asyncio
+async def test_outlook_recovery_history_is_bounded_and_does_not_replay_probes(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(runtime_health, "OUTLOOK_RETRY", 0.001)
+    monkeypatch.setattr(runtime_health, "OUTLOOK_INTERVAL", 0.001)
+    count = 0
+    release = asyncio.Event()
+
+    async def check():
+        nonlocal count
+        count += 1
+        if count > 40:
+            await release.wait()
+        elif count % 2:
+            raise GraphError("private", status_code=502)
+
+    health = RuntimeHealth(
+        AsyncMock(), SimpleNamespace(check_connection=check), tmp_path / "health.json"
+    )
+    try:
+        await health.start()
+        await until(lambda: count > 40)
+        assert len(health.outlook_failures) == 16
+        assert all(failure["recovered_at"] is not None for failure in health.outlook_failures)
+        assert all(failure["checks_failed"] == 1 for failure in health.outlook_failures)
+        assert "private" not in json.dumps(health.snapshot())
+    finally:
+        await health.close()
 
 
 @pytest.mark.asyncio

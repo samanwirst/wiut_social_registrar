@@ -6,6 +6,7 @@ import time
 
 import requests
 
+from .diagnostics import network_error_kind
 from .errors import GraphError, SendStatusUnknown
 
 logger = logging.getLogger("registrar.graph")
@@ -32,14 +33,17 @@ class GraphTransport:
                     timeout=(5, self.settings.timeout),
                     allow_redirects=False,
                 )
-            except requests.RequestException:
+            except requests.RequestException as error:
+                network_error = network_error_kind(error)
                 if method == "POST":
                     raise SendStatusUnknown(
                         "Could not confirm submission. Check Sent Items before retrying: "
-                        "Microsoft may have accepted the email."
+                        "Microsoft may have accepted the email.",
+                        network_error=network_error,
                     ) from None
                 raise GraphError(
-                    "Could not connect to Microsoft Graph. Try the request again."
+                    "Could not connect to Microsoft Graph. Try the request again.",
+                    network_error=network_error,
                 ) from None
             logger.debug(
                 "%s %s -> HTTP %s (%d ms)",
@@ -65,7 +69,8 @@ class GraphTransport:
             if method == "POST" and (response.status_code >= 500 or response.status_code == 408):
                 raise SendStatusUnknown(
                     f"Microsoft Graph: HTTP {response.status_code}. Submission status is unknown. "
-                    "Check Sent Items before retrying."
+                    "Check Sent Items before retrying.",
+                    status_code=response.status_code,
                 )
             if not 200 <= response.status_code < 300:
                 code = ""
@@ -77,7 +82,10 @@ class GraphTransport:
                         code = f" ({candidate})"
                 except ValueError:
                     pass
-                raise GraphError(f"Microsoft Graph: HTTP {response.status_code}{code}.")
+                raise GraphError(
+                    f"Microsoft Graph: HTTP {response.status_code}{code}.",
+                    status_code=response.status_code,
+                )
             return response
         raise GraphError("Microsoft Graph did not accept the request.")
 

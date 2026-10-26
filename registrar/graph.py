@@ -133,5 +133,6 @@ class GraphClient:
         )
         if response.status_code != 202:
             raise SendStatusUnknown(
-                "Microsoft did not confirm acceptance of the email. Check Sent Items before retrying."
+                "Microsoft did not confirm acceptance of the email. Check Sent Items before retrying.",
+                status_code=response.status_code,
             )
