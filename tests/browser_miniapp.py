@@ -22,6 +22,7 @@ from io import BytesIO
 
 from aiogram.types import User
 from aiohttp import web
+from openpyxl import load_workbook
 from PIL import Image, ImageDraw
 from playwright.async_api import async_playwright
 
@@ -734,6 +735,37 @@ async def main():
                 saved_page = await events.answer_page(100, career.id, 1)
                 assert saved_page.members[0]["organizer_values"]
                 assert saved_page.members[0]["answers"][q["id"]] == ["Software engineering"]
+                export_button = page.get_by_role("button", name="Export .xlsx", exact=True)
+
+                async def failed_export(route):
+                    await route.fulfill(
+                        status=503, json={"error": "Export unavailable — try again"}
+                    )
+
+                await page.route("**/members.xlsx", failed_export)
+                await export_button.click()
+                await page.get_by_role("alert").filter(has_text="Export unavailable").wait_for()
+                assert await export_button.is_enabled()
+                await page.unroute("**/members.xlsx", failed_export)
+                async with page.expect_download() as participants_export:
+                    await export_button.click()
+                download = await participants_export.value
+                assert download.suggested_filename == f"participants-{career.id}.xlsx"
+                exported_path = OUT / "participants.xlsx"
+                await download.save_as(exported_path)
+                book = load_workbook(exported_path)
+                sheet = book["Participants"]
+                assert sheet.max_row == 13 and sheet.freeze_panes == "C2"
+                assert sheet["A2"].value == "00001000" and sheet["A13"].value == "00001011"
+                assert sheet["H3"].value == long_answer
+                assert sheet["I12"].value == 8
+                assert sheet.tables["Participants"].ref == "A1:I13"
+                book.close()
+                assert (
+                    await page.get_by_role("alert").filter(has_text="Export unavailable").count()
+                    == 0
+                )
+                assert await page.get_by_text("Page 2 of 2", exact=True).is_visible()
                 await check_long_answers(page, events, career.id, text_q, long_answer, OUT)
                 assert await page.get_by_role("tab", name="Messages", exact=True).count() == 0
                 history = page.locator(".broadcast-history")

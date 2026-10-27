@@ -34,6 +34,9 @@ async function request(path: string, options: RequestInit = {}, responseType: 'j
 }
 
 export function api<T>(path: string, options?: RequestInit): Promise<T> { return request(path, options); }
+export function exportParticipants(id: string, signal: AbortSignal): Promise<Blob> {
+  return request(`/api/forms/${encodeURIComponent(id)}/members.xlsx`, { signal }, 'blob');
+}
 export function eventQr(id: string, signal: AbortSignal, transparent = true, designId = ''): Promise<Blob> {
   const suffix = designId ? `/designs/${encodeURIComponent(designId)}/image` : '';
   return request(`/api/events/${encodeURIComponent(id)}/qr${suffix}?transparent=${transparent}`, { signal }, 'blob');

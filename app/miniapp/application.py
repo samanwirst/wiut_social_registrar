@@ -1,5 +1,7 @@
 """Build the HTTP application; resource ownership stays with the bot runtime."""
 
+import asyncio
+
 from aiohttp import web
 
 from app.broadcasts import BroadcastRepository
@@ -9,6 +11,7 @@ from app.services.qr_designer import QrDesigner
 
 from .assets import STATIC, STATIC_DIR, asset, health, ready
 from .auth import telegram_auth
+from .export_routes import export_participants
 from .middleware import errors_and_headers
 from .qr_routes import create_design, design_image, design_status, reset_design, selected_design
 from .routes import (
@@ -20,7 +23,7 @@ from .routes import (
     session_info,
     update_event,
 )
-from .state import BOT, BROADCASTS, HEALTH, QR_DESIGNER, REPOSITORY, TABLE
+from .state import BOT, BROADCASTS, EXPORT_LOCK, HEALTH, QR_DESIGNER, REPOSITORY, TABLE
 from .table_routes import broadcasts, cancel_broadcast, create_broadcast, edit_cell, table_columns
 
 
@@ -32,6 +35,7 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
     app[STATIC_DIR] = static_dir
     app[TABLE] = EventTable(repository.db, clock=repository.clock)
     app[BROADCASTS] = BroadcastRepository(repository.db, clock=repository.clock)
+    app[EXPORT_LOCK] = asyncio.Lock()
     app[QR_DESIGNER] = qr_designer if qr_designer is not None else QrDesigner()
     if runtime_health is not None:
         app[HEALTH] = runtime_health
@@ -63,6 +67,7 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
                 web.get(prefix + "/{event_id}", get_event),
                 web.put(prefix + "/{event_id}", update_event),
                 web.get(prefix + "/{event_id}/members", event_members),
+                web.get(prefix + "/{event_id}/members.xlsx", export_participants),
                 web.delete(prefix + "/{event_id}/answers", delete_answers),
                 web.get(prefix + "/{event_id}/qr", qr_code),
                 web.post(prefix + "/{event_id}/qr/designs", create_design),
