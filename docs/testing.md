@@ -123,3 +123,11 @@ Its Telegram SDK stub intercepts the handoff; no real Telegram page or message i
 `browser_answers.py` exercises three-line previews, literal full answers, native Back navigation,
 preserved pagination/selection/scroll, expanded text drafts, conflict recovery, duplicate-save
 protection, unsaved closing confirmation, and viewport resizing above the Save action.
+
+Participant export tests open generated workbooks to verify all pages, current edits, retained
+leading zeroes/long text, typed values, duplicate headers, literal formula-like input, empty
+forms, and expired values. The same repository/API checks run on SQLite and PostgreSQL.
+Unsigned/forged identities and other organizers cannot download a form. Thread/cancellation
+checks ensure workbook construction leaves the event loop responsive and retains its slot
+until completion. Browser QA downloads and opens a 12-person workbook from the second page,
+checks edited values, and exercises failure/retry without changing table position or selection.

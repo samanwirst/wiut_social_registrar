@@ -24,6 +24,7 @@ preserves their public commands, API payloads, configuration, and database schem
 | Event editor input validation | `app/events/validation.py` |
 | Invitations and atomic enrollment | `app/events/enrollment.py` |
 | Authorized event/member pages and contact projection | `app/events/queries.py` |
+| Participant workbook rendering and signed download transport | `app/services/participant_export.py`, `app/miniapp/export_routes.py` |
 | Answer retention changes and deletion | `app/events/retention.py` |
 | Shared pagination bounds | `app/pagination.py` |
 | Question definitions, answer validation, and answer transitions | `app/event_forms.py` |

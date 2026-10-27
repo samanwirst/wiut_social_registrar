@@ -67,5 +67,8 @@ class EventRepository:
     async def answer_page(self, user_id, event_id, page=0):
         return await self.queries.answer_page(user_id, event_id, page)
 
+    async def export_members(self, user_id, event_id):
+        return await self.queries.answer_page(user_id, event_id, export=True)
+
     async def purge_answers(self, user_id=None, event_id=None):
         return await self.retention.purge_answers(user_id, event_id)

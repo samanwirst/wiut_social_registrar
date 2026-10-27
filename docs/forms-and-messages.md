@@ -45,6 +45,23 @@ it. Shortening retention applies to existing rows; extending it cannot reopen an
 editing window. Expired values disappear immediately and are physically cleaned up.
 Attendance and the verified student profile remain permanent.
 
+The green **Export .xlsx** button downloads the entire People table, independent of pagination
+and audience selection. A single Participants worksheet contains contacts, education level,
+current question responses, and organizer columns, with a standard Excel table, filters,
+wrapped text, and frozen headers/identity columns. IDs and phone numbers stay literal text;
+numeric/date/checkbox columns keep their supported types. All user text is written as text,
+including strings beginning with `=`, so downloaded responses cannot become formulas.
+Duplicate header labels receive unique suffixes. Expired answers and organizer values are
+blank while attendance/contacts remain. Empty forms still produce a workbook with headers.
+
+Both `/api/forms/{id}/members.xlsx` and the legacy `/api/events/{id}/members.xlsx` require
+signed Telegram authentication and organizer ownership. Exports use the same expiry-filtered
+member projection as the panel, return `Cache-Control: no-store`, and are never saved on the
+server. Workbook generation runs in a background thread; one export at a time per process
+prevents overlapping workbook construction. A cancelled request retains that slot until its
+writer exits. The Mini App downloads the authenticated response as a blob and releases its
+object URL when replaced or closed. This uses standard `.xlsx` without macros or external links.
+
 ## Message selected people
 
 1. Select individual row checkboxes or the current page. The count includes selections

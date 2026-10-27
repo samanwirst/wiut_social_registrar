@@ -73,7 +73,7 @@ class EventQueries:
         async with self.db.transaction() as session:
             return await self._members(session, user_id, event_id, page)
 
-    async def _members(self, session, user_id, event_id, page, *, extended=False):
+    async def _members(self, session, user_id, event_id, page, *, extended=False, export=False):
         event = await owned_event(
             session, user_id, event_id, denied="Only the event organizer can view its members."
         )
@@ -84,6 +84,7 @@ class EventQueries:
         )
         bounds = page_bounds(total, page, self.MEMBERS_PAGE_SIZE)
         page, pages = bounds.page, bounds.pages
+        limit = total if export else self.MEMBERS_PAGE_SIZE
         rows = (
             (
                 await session.execute(
@@ -108,8 +109,8 @@ class EventQueries:
                     )
                     .where(EventRegistration.event_id == event.id)
                     .order_by(EventRegistration.registered_at, EventRegistration.id)
-                    .offset(page * self.MEMBERS_PAGE_SIZE)
-                    .limit(self.MEMBERS_PAGE_SIZE)
+                    .offset(0 if export else page * self.MEMBERS_PAGE_SIZE)
+                    .limit(limit)
                 )
             )
             .mappings()
@@ -122,15 +123,20 @@ class EventQueries:
                     item.pop(key)
         return MembersPage(event, total, page, pages, values)
 
-    async def answer_page(self, user_id, event_id, page=0):
+    async def answer_page(self, user_id, event_id, page=0, *, export=False):
         async with self.db.transaction() as session:
-            members = await self._members(session, user_id, event_id, page, extended=True)
+            members = await self._members(
+                session, user_id, event_id, page, extended=True, export=export
+            )
+            registration_ids = (
+                select(EventRegistration.id).where(EventRegistration.event_id == event_id)
+                if export
+                else [m["registration_id"] for m in members.members]
+            )
             table_rows = (
                 await session.scalars(
                     select(EventTableValues).where(
-                        EventTableValues.registration_id.in_(
-                            [m["registration_id"] for m in members.members]
-                        ),
+                        EventTableValues.registration_id.in_(registration_ids),
                         EventTableValues.expires_at > self.clock(),
                     )
                 )
@@ -142,7 +148,9 @@ class EventQueries:
                     .join(EventAnswers, EventAnswers.registration_id == EventRegistration.id)
                     .where(
                         EventRegistration.event_id == event_id,
-                        EventRegistration.telegram_user_id.in_(
+                        True
+                        if export
+                        else EventRegistration.telegram_user_id.in_(
                             [item["telegram_id"] for item in members.members]
                         ),
                         EventAnswers.expires_at > self.clock(),

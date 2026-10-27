@@ -136,6 +136,9 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
 @media (prefers-reduced-motion: reduce) { .qr-generation-canvas::before, .qr-generation-canvas::after { animation: none; } }
 .event-link { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; user-select: all; }
 .table-tools { display: flex; align-items: center; justify-content: space-between; padding: var(--studio-inset); gap: var(--studio-space-3); flex-wrap: wrap; }
+.participant-export { display: grid; gap: var(--studio-space-2); }
+.event-studio .export-xlsx { background: #217346; color: #fff; }
+.event-studio .export-xlsx:hover { background: #195c37; }
 .scroll-table { max-width: 100%; overflow: auto; max-height: 65vh; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; line-height: 1.45; text-align: start; }
 th, td { padding: var(--studio-space-3) var(--studio-inset); border-bottom: 1px solid var(--tgui--divider); min-width: 120px; max-width: 280px; overflow-wrap: anywhere; vertical-align: top; }

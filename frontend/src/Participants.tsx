@@ -9,6 +9,7 @@ import { AnswerDetails } from './AnswerDetails';
 import { openTelegramChat } from './telegram';
 import { useRemoteResource } from './hooks/useRemoteResource';
 import { Pagination } from './Pagination';
+import { ExportParticipants } from './ExportParticipants';
 import type { Broadcast, CellChange, MembersPage } from './types';
 
 function Contact({ value, prefix }: { value: string | null; prefix: string }) {
@@ -64,6 +65,7 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} people · 10 per page</Caption>
       <div className="actions">
+        <ExportParticipants key={eventId} eventId={eventId} />
         <Button type="button" size="s" mode="bezeled" disabled={loading} onClick={reload}>Refresh</Button>
       </div>
     </div>
