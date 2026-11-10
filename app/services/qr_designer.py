@@ -275,3 +275,12 @@ class QrDesigner:
         if self.session is not None:
             await self.session.close()
         self.jobs.clear()
+
+    async def image(self, owner, event_id, design_id, *, transparent):
+        image = await self.store.image(owner, event_id, design_id, transparent=transparent)
+        if image is not None:
+            return image
+        job = self.get(owner, event_id, design_id)
+        if job is not None and job.status == "ready":
+            return job.images[transparent]
+        return None

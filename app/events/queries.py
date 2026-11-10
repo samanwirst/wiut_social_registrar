@@ -4,7 +4,9 @@ from datetime import timedelta
 from sqlalchemy import func, select
 
 from app.clock import utc_now
+from app.event_errors import EventError
 from app.events.access import owned_event, require_registered
+from app.events.selection import selected_member_ids
 from app.models import (
     Event,
     EventAnswers,
@@ -32,6 +34,7 @@ class MembersPage:
     page: int
     pages: int
     members: list[dict]
+    export_scope: str = "all"
 
 
 class EventQueries:
@@ -73,15 +76,20 @@ class EventQueries:
         async with self.db.transaction() as session:
             return await self._members(session, user_id, event_id, page)
 
-    async def _members(self, session, user_id, event_id, page, *, extended=False, export=False):
+    async def _members(
+        self, session, user_id, event_id, page, *, extended=False, export=False, selected=None
+    ):
         event = await owned_event(
             session, user_id, event_id, denied="Only the event organizer can view its members."
         )
+        condition = EventRegistration.event_id == event.id
+        if selected is not None:
+            condition &= EventRegistration.telegram_user_id.in_(selected)
         total = await session.scalar(
-            select(func.count())
-            .select_from(EventRegistration)
-            .where(EventRegistration.event_id == event.id)
+            select(func.count()).select_from(EventRegistration).where(condition)
         )
+        if selected is not None and total != len(selected):
+            raise EventError("Choose only participants registered for this form")
         bounds = page_bounds(total, page, self.MEMBERS_PAGE_SIZE)
         page, pages = bounds.page, bounds.pages
         limit = total if export else self.MEMBERS_PAGE_SIZE
@@ -107,7 +115,7 @@ class EventQueries:
                         OutlookProfile,
                         OutlookProfile.id == EventRegistration.outlook_profile_id,
                     )
-                    .where(EventRegistration.event_id == event.id)
+                    .where(condition)
                     .order_by(EventRegistration.registered_at, EventRegistration.id)
                     .offset(0 if export else page * self.MEMBERS_PAGE_SIZE)
                     .limit(limit)
@@ -121,18 +129,26 @@ class EventQueries:
             for item in values:
                 for key in ("registration_id", "row_revision", "registered_at", "editable_until"):
                     item.pop(key)
-        return MembersPage(event, total, page, pages, values)
+        return MembersPage(
+            event, total, page, pages, values, "selected" if selected is not None else "all"
+        )
 
-    async def answer_page(self, user_id, event_id, page=0, *, export=False):
+    async def answer_page(self, user_id, event_id, page=0, *, export=False, selected=None):
+        if selected is not None:
+            selected = selected_member_ids(selected)
         async with self.db.transaction() as session:
             members = await self._members(
-                session, user_id, event_id, page, extended=True, export=export
+                session, user_id, event_id, page, extended=True, export=export, selected=selected
             )
             registration_ids = (
                 select(EventRegistration.id).where(EventRegistration.event_id == event_id)
                 if export
                 else [m["registration_id"] for m in members.members]
             )
+            if export and selected is not None:
+                registration_ids = registration_ids.where(
+                    EventRegistration.telegram_user_id.in_(selected)
+                )
             table_rows = (
                 await session.scalars(
                     select(EventTableValues).where(
@@ -148,11 +164,7 @@ class EventQueries:
                     .join(EventAnswers, EventAnswers.registration_id == EventRegistration.id)
                     .where(
                         EventRegistration.event_id == event_id,
-                        True
-                        if export
-                        else EventRegistration.telegram_user_id.in_(
-                            [item["telegram_id"] for item in members.members]
-                        ),
+                        EventRegistration.id.in_(registration_ids),
                         EventAnswers.expires_at > self.clock(),
                     )
                 )
@@ -165,8 +177,9 @@ class EventQueries:
                     or member["registered_at"]
                     + timedelta(days=members.event.response_retention_days)
                 ).isoformat()
-                member.pop("registered_at")
-                member.pop("registration_id")
+                if not export:
+                    member.pop("registered_at")
+                    member.pop("registration_id")
                 response = answers.get(member["telegram_id"])
                 member["answers"] = response.answers if response else None
                 member["answers_expires_at"] = response.expires_at.isoformat() if response else None

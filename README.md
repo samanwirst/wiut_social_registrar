@@ -168,7 +168,7 @@ Registered students create forms with `/new_form SU Advisors` (name up to 200 ch
 The bot saves the form and opens **Manage form**. In Overview, edit its details and optional
 department. The same form can serve an event, an advisor call, or another application without
 choosing a type. `/new_event` remains an alias and old QR invitations remain valid.
-Open the **QR** tab to download a PNG or copy
+Open the **QR** tab to send its PNG to your bot chat or copy
 the invite link; no QR or registration button is posted in the creation message.
 
 The **People** table supports editing responses and adding typed organizer columns while keeping
@@ -196,10 +196,11 @@ The Mini App becomes available only after a student **successfully creates their
 The organizer workspace provides:
 
 - Form name, department, description, and an open/closed registration switch.
-- A dedicated **QR** tab with a copyable registration link and downloadable **PNG**. Choose a transparent or opaque background, or describe a custom AI design. QR images load only when this tab is opened; the other pages focus on editing and participants.
+- A dedicated **QR** tab with a copyable registration link and **Send QR to chat**. The bot sends the original **PNG** document, preserving quality and transparency. Choose a transparent or opaque background, or describe a custom AI design. QR images load only when this tab is opened; the other pages focus on editing and participants.
 - Up to **20 questions**, with **Text response (TR)** and **Multiple choice (MC)** answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
 - A People table with **10 rows per page**, contact details, Level, editable response cells, organizer columns, and multi-page audience selection. **Refresh** fetches current answers. Answers expire automatically according to the form's retention period.
-- **Export .xlsx** downloads all participants in one Excel workbook, including contacts, Level, current answers, and organizer columns. The file has filters and frozen headers; student IDs keep leading zeroes and long answers are exported in full. Export includes every page, regardless of the selected audience, and is available only to the form owner.
+- **Export .xlsx** sends the selected participants to your private bot chat in one Excel workbook, including contacts, Level, current answers, and organizer columns. The file has filters and frozen headers; student IDs keep leading zeroes and long answers are exported in full. Mark rows on any page to choose the export; the button stays disabled until at least one participant is selected and is available only to the form owner. Both file buttons open the bot chat without closing the panel on Telegram 7.0+; generation and sending continue on the server when the panel is minimized.
+- Workbooks include readable **Export info** and **Columns** sheets for integration with other systems: event UUID, file UUID, format version, UTC timestamps, selection scope, stable field keys and types. Participant IDs stay in hidden columns of the same table. See the [workbook import contract](docs/participant-export.md).
 - Automatic expiration of extra answers after **30 days by default**. Retention is managed by the server.
 
 Set up questions **before sharing the QR code**. Forms start open and have no questions, preserving immediate enrollment until questions are added. Students who already submitted are not asked to submit again; any extra answer cells show a dash.
@@ -240,7 +241,7 @@ The generation card shows the current stage and elapsed time, then replaces its 
 preview with the checked image. The button counts down until the next generation is
 available. Repeated submissions resume an active design for the same event without
 requesting another image. **Reconnect** checks an interrupted job without regenerating it;
-if a new generation fails, the previous checked preview remains available to download.
+if a new generation fails, the previous checked preview remains available to send to your chat.
 
 Both transparent and opaque PNGs use the same generated artwork. Changing the background
 does not request another image. Generation continues while navigating between tabs;
@@ -264,7 +265,7 @@ Center artwork uses part of H-level error correction and can cover central align
 Up to four local layouts reduce its footprint until **both** backgrounds scan; this never
 requests another image or silently substitutes an ordinary QR code.
 Before any styled PNG is made available, ZXing checks the exact event URL at full size,
-300px, and with mild blur. Failed checks block the design download. These automated checks
+300px, and with mild blur. Failed checks block sending the design. These automated checks
 cannot guarantee every camera or printing condition: transparent QR codes need a light,
 plain surface, and every final printed design should be tested with a phone camera.
 

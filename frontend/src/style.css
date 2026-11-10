@@ -139,6 +139,7 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
 .participant-export { display: grid; gap: var(--studio-space-2); }
 .event-studio .export-xlsx { background: #217346; color: #fff; }
 .event-studio .export-xlsx:hover { background: #195c37; }
+.event-studio .export-xlsx:disabled { background: var(--tgui--secondary_fill); color: var(--tgui--hint_color); opacity: .5; }
 .scroll-table { max-width: 100%; overflow: auto; max-height: 65vh; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; line-height: 1.45; text-align: start; }
 th, td { padding: var(--studio-space-3) var(--studio-inset); border-bottom: 1px solid var(--tgui--divider); min-width: 120px; max-width: 280px; overflow-wrap: anywhere; vertical-align: top; }
@@ -171,12 +172,16 @@ td a { display: block; }
 .audience-tools { display: grid; gap: var(--studio-space-3); }
 .broadcast-entry { color: var(--tgui--text_color); text-decoration: none; cursor: pointer; }
 .audience-tools { padding: var(--studio-inset); border-block: 1px solid var(--tgui--divider); }
+.audience-tools > .actions { align-items: flex-start; }
 .table-columns > button { margin-inline: var(--studio-space-2); }
 .table-columns .field-stack { padding: var(--studio-inset); }
 .column-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--studio-space-2); }
 .column-row > span { flex: 1; min-width: 100px; overflow-wrap: anywhere; }
 .selection-cell { min-width: 56px; width: 56px; max-width: 56px; padding-inline: var(--studio-space-2); }
 .selection-cell label { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.selection-cell label > [aria-hidden=true] { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; }
+.selection-cell input[aria-checked=mixed] ~ div[aria-hidden=true] { opacity: 1; }
+.selection-cell label:focus-within { outline: 2px solid var(--tgui--link_color); outline-offset: 2px; border-radius: 4px; }
 .selection-cell [aria-hidden=true], .cell-check [aria-hidden=true] { pointer-events: none; }
 .editable-cell { padding: var(--studio-space-1); }
 .event-studio .cell-value { appearance: none; font: inherit; color: inherit; display: block; width: 100%; min-height: 44px; padding: var(--studio-space-2) var(--studio-space-3); background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius-control); text-align: start; overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; }

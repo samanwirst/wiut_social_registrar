@@ -5,6 +5,7 @@ import { Field } from './Field';
 import { CheckIcon } from './Icons';
 import type { useQrDesign } from './hooks/useQrDesign';
 import { useObjectUrl, useRemoteResource } from './hooks/useRemoteResource';
+import { useChatFile } from './hooks/useChatFile';
 import type { EventDetails, Notify } from './types';
 
 export function EventShare({ event, designer, notify }: {
@@ -19,6 +20,7 @@ export function EventShare({ event, designer, notify }: {
   const { data, error, loading, reload } = useRemoteResource(load);
   const blob = !loading && data?.transparent === transparent && data?.designId === designId ? data.blob : null;
   const qr = useObjectUrl(blob);
+  const file = useChatFile(event.id);
   const failed = designer.error || (designer.design?.status === 'failed' ? designer.design.error : '');
   const phase = designer.starting ? 'Sending your request'
     : designer.design?.status === 'verifying' ? 'Checking QR readability' : 'Creating your image';
@@ -27,11 +29,6 @@ export function EventShare({ event, designer, notify }: {
   const copy = async () => {
     try { await navigator.clipboard.writeText(event.link); notify('Form link copied'); }
     catch { notify('Could not copy the link. Select the form link below the QR code', true); }
-  };
-  const download = () => {
-    if (!qr) return;
-    const anchor = document.createElement('a');
-    anchor.href = qr; anchor.download = `event-${event.id}${designId ? '-design' : ''}.png`; anchor.click();
   };
   const generate = () => {
     if (designer.busy || designer.restoring || designer.resetting || designer.cooldown > 0 || !prompt.trim()) return;
@@ -51,7 +48,7 @@ export function EventShare({ event, designer, notify }: {
         <Button type="submit" stretched
           disabled={!event.qr_styling_enabled || !prompt.trim() || designer.busy || designer.restoring || designer.resetting || designer.cooldown > 0}>
           {designer.busy ? 'Creating design' : designer.cooldown > 0 ? `Generate again in ${designer.cooldown}s` : 'Generate design'}</Button>
-        {!event.qr_styling_enabled ? <Caption className="muted">AI designs are not enabled yet — standard QR downloads are available</Caption> : null}
+        {!event.qr_styling_enabled ? <Caption className="muted">AI designs are not enabled yet. You can send a standard QR to your chat</Caption> : null}
         {designer.notice ? <Caption className="muted" role="status">{designer.notice}</Caption> : null}
       </form>
       <div className="qr-result" ref={result}>
@@ -84,7 +81,10 @@ export function EventShare({ event, designer, notify }: {
             subtitle={transparent ? 'For light backgrounds and print layouts' : 'Include artwork around your QR code'}
             after={<Switch aria-label="Transparent background" checked={transparent}
               onChange={e => setTransparent(e.target.checked)} />}>Transparent background</Cell>
-          <Button type="button" stretched disabled={!qr} onClick={download}>Download PNG</Button>
+          <Button type="button" stretched loading={file.busy} disabled={!qr || file.busy}
+            onClick={() => { void file.send({ kind: 'qr', transparent, design_id: designId }); }}>Send QR to chat</Button>
+          {file.notice ? <Caption role="status">{file.notice}</Caption> : null}
+          {file.error ? <Caption role="alert" className="danger">{file.error}</Caption> : null}
         </>}
         {!designer.busy && failed ? <div className="qr-design-error" role="alert"><strong>Couldn't create this design</strong>
           <Caption>{failed}</Caption>{designId ? <Caption className="muted">Your previous design is still available above</Caption> : null}</div> : null}

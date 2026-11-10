@@ -23,13 +23,15 @@ from io import BytesIO
 from aiogram.types import User
 from aiohttp import web
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 from PIL import Image, ImageDraw
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 
 from app.broadcasts import BroadcastRepository
 from app.db import Database
 from app.event_repository import EventRepository
 from app.miniapp import create_web_app
+from app.miniapp.state import CHAT_FILES
 from app.repositories import RegistrationRepository
 from app.services.qr_art import QrDesignError, scan_verified
 from app.services.qr_designer import QrDesigner
@@ -66,12 +68,30 @@ async def assert_native_geometry(page, platform):
             buttons: styles('.event-studio button:not([role=tab]):not(.event-card):not(.poll-option-remove)'),
             arrows: [...document.querySelectorAll('.event-studio button')]
                 .filter(node => /[←→↑↓›＋]/u.test(node.textContent)).map(node => node.textContent),
+            checkboxLayers: [...document.querySelectorAll('.selection-cell label')].map(label => {
+                const box = label.getBoundingClientRect();
+                return [...label.querySelectorAll(':scope > [aria-hidden=true]')].map(layer => {
+                    const rect = layer.getBoundingClientRect();
+                    return {dx: Math.abs(rect.x + rect.width / 2 - box.x - box.width / 2),
+                        dy: Math.abs(rect.y + rect.height / 2 - box.y - box.height / 2),
+                        width: rect.width, height: rect.height, hitWidth: box.width, hitHeight: box.height};
+                });
+            }).flat(),
             overflow: document.documentElement.scrollWidth > window.innerWidth,
             chrome: [window.testHeaderColor, window.testBackgroundColor, window.testBottomBarColor],
         };
     }""")
     assert not geometry["overflow"], geometry
     assert not geometry["arrows"], geometry
+    assert all(
+        layer["dx"] <= 1
+        and layer["dy"] <= 1
+        and layer["width"] == 24
+        and layer["height"] == 24
+        and layer["hitWidth"] >= 44
+        and layer["hitHeight"] >= 44
+        for layer in geometry["checkboxLayers"]
+    ), geometry
     assert geometry["chrome"] == ["secondary_bg_color"] * 3, geometry
     assert all(item["radius"] == "12px" for item in geometry["sections"]), geometry
     radius = "12px" if platform == "ios" else "8px"
@@ -156,8 +176,17 @@ async def main():
         await broadcasts.queue(100, sent_message["id"], ready["revision"])
         while claim := await broadcasts.claim():
             await broadcasts.finish(claim, "sent", message_id=700)
+        sent_files = []
+
+        async def send_document(**data):
+            assert data["chat_id"] == 100 and data["parse_mode"] is None
+            sent_files.append(data["document"])
+            return SimpleNamespace(message_id=700 + len(sent_files))
+
         bot = SimpleNamespace(
-            token=TOKEN, me=AsyncMock(return_value=SimpleNamespace(username="example_bot"))
+            token=TOKEN,
+            me=AsyncMock(return_value=SimpleNamespace(username="example_bot")),
+            send_document=AsyncMock(side_effect=send_document),
         )
         art = Image.new("RGB", (1024, 1024), "#244d25")
         draw = ImageDraw.Draw(art)
@@ -177,6 +206,36 @@ async def main():
             create_web_app(events, bot, qr_designer=qr_designer), access_log=None
         )
         await runner.setup()
+        file_clock = [time.monotonic()]
+        runner.app[CHAT_FILES].clock = lambda: file_clock[0]
+
+        async def send_chat_file(page, button_name, filename, output, selected_ids=None):
+            file_clock[0] += 4
+            before = len(sent_files)
+            await page.evaluate("() => { window.testComposeLink=null; window.testClosed=false; }")
+            async with page.expect_response(
+                lambda response: (
+                    response.request.method == "POST" and response.url.endswith("/files")
+                )
+            ) as accepted:
+                await page.get_by_role("button", name=button_name, exact=True).click()
+            response = await accepted.value
+            assert response.status == 202
+            if button_name == "Export .xlsx":
+                assert response.request.post_data_json["member_ids"] == (
+                    selected_ids or [1000, 1010]
+                )
+            await page.wait_for_function(
+                "() => window.testComposeLink === 'https://t.me/example_bot'"
+            )
+            assert not await page.evaluate("window.testClosed")
+            await page.get_by_text("Sent to your chat", exact=True).wait_for()
+            assert len(sent_files) == before + 1
+            document = sent_files[-1]
+            assert document.filename == filename
+            output.write_bytes(document.data)
+            return response.request.post_data_json
+
         site = web.TCPSite(runner, "127.0.0.1", 0)
         await site.start()
         port = site._server.sockets[0].getsockname()[1]
@@ -367,11 +426,9 @@ async def main():
                     return {cornerAlpha:data[3],hasOpaqueModules:opaque};
                 }""")
                 assert pixels == {"cornerAlpha": 0, "hasOpaqueModules": True}, pixels
-                async with page.expect_download() as exported:
-                    await page.get_by_role("button", name="Download PNG", exact=True).click()
-                download = await exported.value
-                assert download.suggested_filename == f"event-{draft.id}.png"
-                await download.save_as(OUT / "event-qr.png")
+                await send_chat_file(
+                    page, "Send QR to chat", f"event-{draft.id}.png", OUT / "event-qr.png"
+                )
                 assert (OUT / "event-qr.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 await page.screenshot(path=str(OUT / "desktop-qr.png"), full_page=True)
                 await page.locator(".qr-background").click()
@@ -408,7 +465,8 @@ async def main():
                 await asyncio.wait_for(submitted.wait(), timeout=5)
                 await page.get_by_text("Sending your request", exact=True).wait_for()
                 assert (
-                    await page.get_by_role("button", name="Download PNG", exact=True).count() == 0
+                    await page.get_by_role("button", name="Send QR to chat", exact=True).count()
+                    == 0
                 )
                 # Switching tabs never cancels the server job. The job is resumed by ID.
                 await page.get_by_role("tab", name="Questions", exact=True).click()
@@ -470,7 +528,8 @@ async def main():
                     == "Check QR"
                 )
                 assert (
-                    await page.get_by_role("button", name="Download PNG", exact=True).count() == 0
+                    await page.get_by_role("button", name="Send QR to chat", exact=True).count()
+                    == 0
                 )
                 await page.get_by_text(
                     "PNG · Opaque background · Scan checked", exact=True
@@ -494,11 +553,12 @@ async def main():
                 await page.locator("#event-qr").wait_for()
                 assert provider.generate.await_count == 1
                 await page.unroute("**/qr/designs", slow_submission)
-                async with page.expect_download() as styled_export:
-                    await page.get_by_role("button", name="Download PNG", exact=True).click()
-                styled_download = await styled_export.value
-                assert styled_download.suggested_filename == f"event-{draft.id}-design.png"
-                await styled_download.save_as(OUT / "event-qr-design-transparent.png")
+                await send_chat_file(
+                    page,
+                    "Send QR to chat",
+                    f"event-{draft.id}-design.png",
+                    OUT / "event-qr-design-transparent.png",
+                )
                 with Image.open(OUT / "event-qr-design-transparent.png") as exported_image:
                     assert exported_image.mode == "RGBA"
                     assert scan_verified(
@@ -512,9 +572,12 @@ async def main():
                     "PNG · Opaque background · Scan checked", exact=True
                 ).wait_for()
                 await page.locator("#event-qr").wait_for()
-                async with page.expect_download() as opaque_export:
-                    await page.get_by_role("button", name="Download PNG", exact=True).click()
-                await (await opaque_export.value).save_as(OUT / "event-qr-design-opaque.png")
+                await send_chat_file(
+                    page,
+                    "Send QR to chat",
+                    f"event-{draft.id}-design.png",
+                    OUT / "event-qr-design-opaque.png",
+                )
                 with Image.open(OUT / "event-qr-design-opaque.png") as exported_image:
                     assert exported_image.mode == "RGB"
                     assert scan_verified(
@@ -556,9 +619,12 @@ async def main():
                     "PNG · Transparent background · Scan checked", exact=True
                 ).wait_for()
                 await reopened.locator("#event-qr").wait_for()
-                async with reopened.expect_download() as fresh_export:
-                    await reopened.get_by_role("button", name="Download PNG", exact=True).click()
-                await (await fresh_export.value).save_as(OUT / "event-qr-reopened.png")
+                await send_chat_file(
+                    reopened,
+                    "Send QR to chat",
+                    f"event-{draft.id}-design.png",
+                    OUT / "event-qr-reopened.png",
+                )
                 assert (OUT / "event-qr-reopened.png").read_bytes() == (
                     OUT / "event-qr-design-transparent.png"
                 ).read_bytes()
@@ -588,7 +654,7 @@ async def main():
                 await page.get_by_text("Couldn't create this design", exact=True).wait_for()
                 assert await page.locator("#event-qr").get_attribute("src") == previous_preview
                 assert await page.get_by_role(
-                    "button", name="Download PNG", exact=True
+                    "button", name="Send QR to chat", exact=True
                 ).is_enabled()
                 assert await page.get_by_role("button", name="Reconnect", exact=True).count() == 0
                 await page.locator(".qr-result").screenshot(
@@ -676,14 +742,62 @@ async def main():
                 )
                 assert await page.locator("#event-qr").count() == 0
                 assert await page.locator("tbody tr").count() == 10
-                await page.get_by_label("Select Student 1000", exact=True).locator("..").click()
+                export_button = page.get_by_role("button", name="Export .xlsx", exact=True)
+                assert await export_button.is_disabled()
+                assert (
+                    await page.get_by_role("button", name="Clear selection", exact=True).count()
+                    == 0
+                )
+                assert (
+                    await page.locator(".table-tools")
+                    .get_by_role("button", name="Export .xlsx")
+                    .count()
+                    == 0
+                )
+                assert (
+                    await page.locator(".audience-tools")
+                    .get_by_role("button", name="Export .xlsx")
+                    .count()
+                    == 1
+                )
+                await assert_native_geometry(page, "base")
+                await page.get_by_label("Select this page", exact=True).locator("..").click()
+                await page.get_by_text("10 selected across pages", exact=True).wait_for()
+                assert await export_button.is_enabled()
+                await page.get_by_label("Select this page", exact=True).locator("..").click()
+                await page.get_by_text("0 selected", exact=True).wait_for()
+                assert await export_button.is_disabled()
+                first_checkbox = page.get_by_label("Select Student 1000", exact=True)
+                await first_checkbox.focus()
+                await first_checkbox.press("Space")
                 assert await page.get_by_label("Select Student 1000", exact=True).is_checked()
+                assert (
+                    await page.get_by_label("Select this page", exact=True).get_attribute(
+                        "aria-checked"
+                    )
+                    == "mixed"
+                )
+                await expect(
+                    page.get_by_label("Select this page", exact=True)
+                    .locator("..")
+                    .locator("div[aria-hidden=true]")
+                ).to_have_css("opacity", "1")
+                await assert_native_geometry(page, "base")
+                await page.screenshot(
+                    path=str(OUT / "selected-checkbox-desktop.png"), full_page=True
+                )
                 await page.get_by_role("button", name="Next", exact=True).click()
                 await page.get_by_text("Page 2 of 2", exact=True).wait_for()
                 assert await page.locator("tbody tr").count() == 2
                 await page.get_by_label("Select Student 1010", exact=True).locator("..").click()
                 assert await page.get_by_label("Select Student 1010", exact=True).is_checked()
                 await page.get_by_text("2 selected across pages", exact=True).wait_for()
+                await page.set_viewport_size({"width": 390, "height": 844})
+                await assert_native_geometry(page, "base")
+                await page.screenshot(
+                    path=str(OUT / "selected-checkbox-mobile.png"), full_page=True
+                )
+                await page.set_viewport_size({"width": 1280, "height": 1000})
                 await page.get_by_role("button", name="Prepare message", exact=True).click()
                 await page.wait_for_function("() => window.testComposeLink && window.testClosed")
                 assert (
@@ -742,30 +856,87 @@ async def main():
                         status=503, json={"error": "Export unavailable — try again"}
                     )
 
-                await page.route("**/members.xlsx", failed_export)
+                await page.route("**/files", failed_export)
                 await export_button.click()
                 await page.get_by_role("alert").filter(has_text="Export unavailable").wait_for()
                 assert await export_button.is_enabled()
-                await page.unroute("**/members.xlsx", failed_export)
-                async with page.expect_download() as participants_export:
-                    await export_button.click()
-                download = await participants_export.value
-                assert download.suggested_filename == f"participants-{career.id}.xlsx"
+                await page.unroute("**/files", failed_export)
                 exported_path = OUT / "participants.xlsx"
-                await download.save_as(exported_path)
+                await send_chat_file(
+                    page, "Export .xlsx", f"participants-{career.id}.xlsx", exported_path
+                )
                 book = load_workbook(exported_path)
                 sheet = book["Participants"]
-                assert sheet.max_row == 13 and sheet.freeze_panes == "C2"
-                assert sheet["A2"].value == "00001000" and sheet["A13"].value == "00001011"
+                assert sheet.max_row == 3 and sheet.freeze_panes == "C2"
+                assert sheet["A2"].value == "00001000" and sheet["A3"].value == "00001010"
                 assert sheet["H3"].value == long_answer
-                assert sheet["I12"].value == 8
-                assert sheet.tables["Participants"].ref == "A1:I13"
+                assert sheet["I3"].value == 8
+                assert (
+                    sheet.tables["Participants"].ref == f"A1:{get_column_letter(sheet.max_column)}3"
+                )
+                metadata = {
+                    row[0]: row[1]
+                    for row in book["Export info"].iter_rows(min_row=2, values_only=True)
+                }
+                assert metadata["event_id"] == career.id
+                assert metadata["export_scope"] == "selected"
+                assert metadata["participant_count"] == 2
                 book.close()
                 assert (
                     await page.get_by_role("alert").filter(has_text="Export unavailable").count()
                     == 0
                 )
                 assert await page.get_by_text("Page 2 of 2", exact=True).is_visible()
+                # An accepted request can lose its HTTP response after Telegram has
+                # received the file. Retry reuses the same request ID, never the send.
+                file_clock[0] += 4
+                before = len(sent_files)
+                request_ids = []
+
+                async def lost_file_response(route):
+                    request_ids.append(route.request.post_data_json["request_id"])
+                    await route.fetch()
+                    await route.abort()
+
+                await page.route("**/files", lost_file_response)
+                await export_button.click()
+                await page.get_by_role("alert").filter(has_text="Check your chat").wait_for()
+                await page.unroute("**/files", lost_file_response)
+                async with page.expect_response(
+                    lambda response: (
+                        response.request.method == "POST" and response.url.endswith("/files")
+                    )
+                ) as replayed:
+                    await export_button.click()
+                replay = await replayed.value
+                assert replay.request.post_data_json["request_id"] == request_ids[0]
+                await page.get_by_text("Sent to your chat", exact=True).wait_for()
+                assert len(sent_files) == before + 1
+                assert await page.get_by_text("Page 2 of 2", exact=True).is_visible()
+                assert not await page.evaluate("window.testClosed")
+                # After an unconfirmed request, an explicitly changed selection is a
+                # new export. It must never accidentally upload the previous audience.
+                failed_requests = []
+
+                async def failed_selection_export(route):
+                    failed_requests.append(route.request.post_data_json)
+                    await route.fulfill(status=503, json={"error": "Export unavailable"})
+
+                await page.route("**/files", failed_selection_export)
+                await export_button.click()
+                await page.get_by_role("alert").filter(has_text="Export unavailable").wait_for()
+                await page.unroute("**/files", failed_selection_export)
+                await page.get_by_label("Select Student 1011", exact=True).locator("..").click()
+                changed = await send_chat_file(
+                    page,
+                    "Export .xlsx",
+                    f"participants-{career.id}.xlsx",
+                    OUT / "participants-changed-selection.xlsx",
+                    selected_ids=[1000, 1010, 1011],
+                )
+                assert changed["request_id"] != failed_requests[0]["request_id"]
+                await page.get_by_label("Select Student 1011", exact=True).locator("..").click()
+                await page.get_by_text("2 selected across pages", exact=True).wait_for()
                 await check_long_answers(page, events, career.id, text_q, long_answer, OUT)
                 assert await page.get_by_role("tab", name="Messages", exact=True).count() == 0
                 history = page.locator(".broadcast-history")
@@ -1040,10 +1211,24 @@ async def main():
                 await legacy_page.evaluate("window.testBack()")
                 await legacy_page.get_by_role("dialog").wait_for(state="detached")
                 await legacy_page.get_by_text("12 people · 10 per page", exact=True).wait_for()
+                file_clock[0] += 4
+                assert await legacy_page.get_by_role(
+                    "button", name="Export .xlsx", exact=True
+                ).is_disabled()
+                await (
+                    legacy_page.get_by_label("Select Student 1000", exact=True)
+                    .locator("..")
+                    .click()
+                )
+                await legacy_page.get_by_role("button", name="Export .xlsx", exact=True).click()
+                await legacy_page.get_by_text("Sent to your chat", exact=True).wait_for()
+                assert await legacy_page.evaluate(
+                    "window.testComposeLink === undefined && window.testClosed === undefined"
+                )
                 await browser.close()
             assert not browser_errors, browser_errors
             print(
-                "Browser QA passed: full answers and guarded editing, QR export, MCQ forms, 10-row pagination, Android/iOS layouts, light/dark themes, safe areas, unsaved changes, native geometry and controls at 320/390/900px."
+                "Browser QA passed: chat delivery of XLSX and original QR PNG, preserved Mini App state, lost-response deduplication, legacy SDK fallback, full answers, MCQ forms, pagination, and Android/iOS light/dark layouts at 320/390/900px."
             )
             print("Synthetic screenshots:", OUT)
         finally:

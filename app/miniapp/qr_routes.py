@@ -48,13 +48,11 @@ async def design_status(request):
 async def design_image(request):
     event_id, job = await owned_design(request)
     transparent = transparent_background(request)
-    image = await request.app[QR_DESIGNER].store.image(
+    image = await request.app[QR_DESIGNER].image(
         request[USER], event_id, request.match_info["job_id"], transparent=transparent
     )
     if image is None and job is not None and job.status != "ready":
         raise web.HTTPConflict(text="The design is not ready to download")
-    if image is None and job is not None:
-        image = job.images[transparent]
     if image is None:
         raise web.HTTPNotFound(text="This design has expired. Please generate a new design")
     return web.Response(

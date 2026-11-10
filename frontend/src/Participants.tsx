@@ -58,6 +58,7 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     })),
   }) : previous);
   const allPage = Boolean(data?.members.length && data.members.every(member => selected.has(member.telegram_id)));
+  const partialPage = !allPage && Boolean(data?.members.some(member => selected.has(member.telegram_id)));
   const detailMember = data?.members.find(member => member.telegram_id === detail?.memberId);
   const detailField = detail && (detail.scope === 'answer' ? data?.questions : data?.columns)?.find(field => field.id === detail.fieldId);
 
@@ -65,7 +66,6 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} people · 10 per page</Caption>
       <div className="actions">
-        <ExportParticipants key={eventId} eventId={eventId} />
         <Button type="button" size="s" mode="bezeled" disabled={loading} onClick={reload}>Refresh</Button>
       </div>
     </div>
@@ -73,14 +73,14 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     <div className="audience-tools">
       <Caption role="status">{selected.size} selected{selected.size ? ' across pages' : ''}</Caption>
       <div className="actions"><Button type="button" size="s" mode="bezeled" disabled={!selected.size || preparing} loading={preparing} onClick={() => { void prepare(); }}>Prepare message</Button>
-        {selected.size ? <Button type="button" size="s" mode="plain" disabled={preparing} onClick={() => changeSelection(new Set())}>Clear selection</Button> : null}</div>
+        <ExportParticipants key={eventId} eventId={eventId} selected={selected} disabled={preparing} /></div>
       {composeError ? <Caption role="alert" className="danger">{composeError}</Caption> : null}
     </div>
     {error ? <Placeholder header="Couldn't load people" description={error} action={
       <Button type="button" mode="bezeled" onClick={reload}>Try again</Button>} />
       : loading ? <div className="loading" role="status"><Spinner size="m" /><span>Loading participants…</span></div>
       : data && data.members.length ? <div className="scroll-table" tabIndex={0} role="region" aria-label="Participant contacts and answers">
-        <table><thead><tr><th scope="col" className="selection-cell"><Checkbox aria-label="Select this page" checked={allPage} indeterminate={!allPage && data.members.some(member => selected.has(member.telegram_id))} disabled={preparing} onChange={e => {
+        <table><thead><tr><th scope="col" className="selection-cell"><Checkbox aria-label="Select this page" aria-checked={partialPage ? 'mixed' : allPage} checked={allPage} indeterminate={partialPage} disabled={preparing} onChange={e => {
           const next = new Set(selected); data.members.forEach(member => { if (e.target.checked) next.add(member.telegram_id); else next.delete(member.telegram_id); }); changeSelection(next);
         }} /></th>{['Student ID', 'Name', 'Telegram', 'Email', 'Phone', 'Level', ...data.questions.map(q => q.label), ...data.columns.map(c => c.label)]
           .map((label, index) => <th scope="col" key={index}>{label}</th>)}</tr></thead>

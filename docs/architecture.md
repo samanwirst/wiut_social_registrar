@@ -24,7 +24,8 @@ preserves their public commands, API payloads, configuration, and database schem
 | Event editor input validation | `app/events/validation.py` |
 | Invitations and atomic enrollment | `app/events/enrollment.py` |
 | Authorized event/member pages and contact projection | `app/events/queries.py` |
-| Participant workbook rendering and signed download transport | `app/services/participant_export.py`, `app/miniapp/export_routes.py` |
+| Participant workbook rendering and legacy download transport | `app/services/participant_export.py`, `app/miniapp/export_routes.py` |
+| Versioned workbook field identities and import metadata | `app/services/participant_export_schema.py` |
 | Answer retention changes and deletion | `app/events/retention.py` |
 | Shared pagination bounds | `app/pagination.py` |
 | Question definitions, answer validation, and answer transitions | `app/event_forms.py` |
@@ -33,6 +34,7 @@ preserves their public commands, API payloads, configuration, and database schem
 | Signed Telegram authentication | `app/miniapp/auth.py` |
 | HTTP input/output, headers, and static allowlist | `app/miniapp/routes.py`, `middleware.py`, `assets.py` |
 | HTTP/TLS startup and shutdown | `app/miniapp/server.py` |
+| Owner-scoped file delivery to Telegram and signed job transport | `app/services/chat_files.py`, `app/miniapp/file_routes.py` |
 | Independent answer expiration worker | `app/services/answer_cleanup.py` |
 | Dependency probes and private runtime heartbeat | `app/services/runtime_health.py` |
 | Independent process supervision and administrator delivery | `monitoring/`, `deploy/install_watchdog.py` |
@@ -123,7 +125,8 @@ Graph configuration, database validation, and Mini App URL/TLS validation have s
 Components render the existing TelegramUI interface. Focused hooks own shared behavior:
 
 - `useRemoteResource`: per-consumer request state, retry, abort, and stale-response suppression.
-- `useObjectUrl`: object URL allocation and cleanup for QR downloads.
+- `useObjectUrl`: object URL allocation and cleanup for QR previews.
+- `useChatFile`: idempotent file requests, status polling, cancellation cleanup, and Telegram chat handoff without closing the Mini App.
 - `useQrDesign`: restoring the server's selected design and active job, bounded submissions,
   abortable polling, elapsed/cooldown timers, and optional device-local background preference.
 - `useWorkspace`: initial loading and guarded navigation between event lists and details.
