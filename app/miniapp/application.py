@@ -7,11 +7,13 @@ from aiohttp import web
 from app.broadcasts import BroadcastRepository
 from app.events.qr_designs import EventQrDesigns
 from app.events.table import EventTable
+from app.services.chat_files import ChatFiles
 from app.services.qr_designer import QrDesigner
 
 from .assets import STATIC, STATIC_DIR, asset, health, ready
 from .auth import telegram_auth
 from .export_routes import export_participants
+from .file_routes import file_status, send_file
 from .middleware import errors_and_headers
 from .qr_routes import create_design, design_image, design_status, reset_design, selected_design
 from .routes import (
@@ -23,7 +25,7 @@ from .routes import (
     session_info,
     update_event,
 )
-from .state import BOT, BROADCASTS, EXPORT_LOCK, HEALTH, QR_DESIGNER, REPOSITORY, TABLE
+from .state import BOT, BROADCASTS, CHAT_FILES, EXPORT_LOCK, HEALTH, QR_DESIGNER, REPOSITORY, TABLE
 from .table_routes import broadcasts, cancel_broadcast, create_broadcast, edit_cell, table_columns
 
 
@@ -37,6 +39,7 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
     app[BROADCASTS] = BroadcastRepository(repository.db, clock=repository.clock)
     app[EXPORT_LOCK] = asyncio.Lock()
     app[QR_DESIGNER] = qr_designer if qr_designer is not None else QrDesigner()
+    app[CHAT_FILES] = ChatFiles(repository, bot, app[QR_DESIGNER], app[EXPORT_LOCK])
     if runtime_health is not None:
         app[HEALTH] = runtime_health
 
@@ -48,6 +51,14 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
             await app[QR_DESIGNER].close()
 
     app.cleanup_ctx.append(designs_lifecycle)
+
+    async def file_lifecycle(app):
+        try:
+            yield
+        finally:
+            await app[CHAT_FILES].close()
+
+    app.cleanup_ctx.append(file_lifecycle)
     app.add_routes(
         [
             web.get("/health", health),
@@ -68,6 +79,8 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
                 web.put(prefix + "/{event_id}", update_event),
                 web.get(prefix + "/{event_id}/members", event_members),
                 web.get(prefix + "/{event_id}/members.xlsx", export_participants),
+                web.post(prefix + "/{event_id}/files", send_file),
+                web.get(prefix + "/{event_id}/files/{request_id}", file_status),
                 web.delete(prefix + "/{event_id}/answers", delete_answers),
                 web.get(prefix + "/{event_id}/qr", qr_code),
                 web.post(prefix + "/{event_id}/qr/designs", create_design),

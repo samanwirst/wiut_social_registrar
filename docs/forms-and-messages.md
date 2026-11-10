@@ -45,27 +45,73 @@ it. Shortening retention applies to existing rows; extending it cannot reopen an
 editing window. Expired values disappear immediately and are physically cleaned up.
 Attendance and the verified student profile remain permanent.
 
-The green **Export .xlsx** button downloads the entire People table, independent of pagination
-and audience selection. A single Participants worksheet contains contacts, education level,
+The green **Export .xlsx** button beside **Prepare message** sends only the selected participants
+to the owner's private bot chat. It stays disabled with no selection. Row and page checkboxes
+share one selection across pages for both exports and messages. Uncheck rows or the current
+page to remove them from the selection. The Participants worksheet contains contacts, education level,
 current question responses, and organizer columns, with a standard Excel table, filters,
 wrapped text, and frozen headers/identity columns. IDs and phone numbers stay literal text;
 numeric/date/checkbox columns keep their supported types. All user text is written as text,
-including strings beginning with `=`, so downloaded responses cannot become formulas.
+including strings beginning with `=`, so exported responses cannot become formulas.
 Duplicate header labels receive unique suffixes. Expired answers and organizer values are
-blank while attendance/contacts remain. Empty forms still produce a workbook with headers.
+blank while attendance/contacts remain. The legacy full-table download still supports empty
+forms, while sending a selected export requires at least one participant.
 
-Both `/api/forms/{id}/members.xlsx` and the legacy `/api/events/{id}/members.xlsx` require
-signed Telegram authentication and organizer ownership. Exports use the same expiry-filtered
-member projection as the panel, return `Cache-Control: no-store`, and are never saved on the
-server. Workbook generation runs in a background thread; one export at a time per process
-prevents overlapping workbook construction. A cancelled request retains that slot until its
-writer exits. The Mini App downloads the authenticated response as a blob and releases its
-object URL when replaced or closed. This uses standard `.xlsx` without macros or external links.
+The same file includes **Export info** and **Columns** worksheets for future imports:
+format version, event/file IDs, UTC timestamps, selection scope, and stable field IDs/types.
+Technical participant IDs, attendance timestamps/revisions, and exact JSON choice lists
+are hidden at the right of Participants, inside its table so sorting keeps rows intact.
+Users can unhide them; neither explanatory sheet is hidden. The
+[versioned workbook contract](participant-export.md) describes metadata and import rules.
+
+**Send QR to chat** sends the exact original PNG for the current background and selected
+scan-checked design as a document, preserving its transparency and resolution. It also works
+with standard QR codes and designs restored from the database after an application restart.
+Both buttons use `POST /api/forms/{id}/files` (also available under `/api/events`) with a
+unique request ID (plus selected `member_ids` for workbooks), followed by authenticated `GET .../files/{request_id}` status checks.
+The recipient comes only from signed Telegram identity, and every endpoint checks event
+ownership. Query parameters cannot choose a recipient or grant access. The repository filters selected
+IDs within this exact form; unknown or foreign-form IDs reject the export rather than silently
+including extra people. Selection is frozen when the button is pressed. Reusing a request ID
+with different selected IDs is rejected. Selected exports accept 1–2000 distinct participants.
+
+The server accepts the request before preparing/sending the file. The client immediately
+opens the bot's plain Telegram chat link through `openTelegramLink`, without invoking
+`close`, `sendData`, or `answerWebAppQuery`. Telegram 7.0+ preserves the Mini App during this
+handoff; exact minimized/tab presentation depends on the client. Older clients stay in the
+panel rather than calling a method that would close it. The file still goes to the bot chat.
+No extra Start payload or confirmation click is required. The same WebView preserves drafts,
+selected participants, pagination, QR background, and selected design when returning.
+
+`ChatFiles` owns background work separately from HTTP requests, so minimizing, losing the
+response, or disconnecting cannot cancel an accepted send. Repeated requests with the same
+owner/request ID reuse the job and never resubmit to Telegram. Changed parameters cannot
+reuse an ID. Status shows preparing/sending/sent/failed/unknown; only a confirmed Bot API
+response means sent. Network/server ambiguity is never automatically retried. The frontend
+reuses the request ID after an unconfirmed HTTP response and checks accepted jobs instead of
+starting another send. Confirmed rejection/preparation failures allow an explicit new request.
+Preparation failures also attempt one safe message in the owner's chat, since the panel may
+already be minimized. Notification failure does not trigger automatic retries.
+
+Per process, the service allows one active job per owner, eight globally, three seconds between
+new jobs, and at most 256 metadata records. Completed metadata expires after one hour. It stores
+neither workbook/PNG bytes nor answer contents in that history. Buffers are released after the
+send and are never persisted as server files. Workbook rendering runs in a background thread
+with one writer at a time; cancellation retains the writer slot until it exits. Shutdown drains
+accepted jobs for up to 50 seconds before cancelling remaining work, then closes QR resources.
+The queue/history is in memory: a forced process loss can interrupt work, and a new process
+cannot recover its status or guarantee exactly-once delivery. Check the bot chat before manually
+requesting a file again after such an interruption. Persisted registrations and designs remain.
+
+Legacy authenticated GET workbook/PNG endpoints remain available for existing clients and QR
+previews; neither button uses browser downloads or file object URLs. Preview URLs still follow
+the existing cleanup lifecycle. No personal data is put in browser storage. Standard `.xlsx`
+files contain no macros or external links.
 
 ## Message selected people
 
 1. Select individual row checkboxes or the current page. The count includes selections
-   across pages. Clear selection resets it.
+   across pages. Uncheck a row or the current page to remove it.
 2. Choose **Prepare message**. This saves an idempotent audience draft and immediately
    opens the bot chat to compose the message; recipients receive nothing yet.
 3. Reply to **Write your message** using Telegram's own formatting: bold, italic, links,

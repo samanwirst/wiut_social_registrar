@@ -30,7 +30,9 @@ async def client(repository):
     events = EventRepository(repository.db, clock=repository.clock)
     event = await events.create(100, "Owner's event <script>")
     bot = SimpleNamespace(
-        token=TOKEN, me=AsyncMock(return_value=SimpleNamespace(username="example_bot"))
+        token=TOKEN,
+        me=AsyncMock(return_value=SimpleNamespace(username="example_bot")),
+        send_document=AsyncMock(return_value=SimpleNamespace(message_id=500)),
     )
     async with TestClient(TestServer(create_web_app(events, bot))) as instance:
         instance.event_id = event.id

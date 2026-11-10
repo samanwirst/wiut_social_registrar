@@ -32,6 +32,11 @@ export function openTelegramChat(url: string) {
   else window.open(url, '_blank', 'noopener,noreferrer');
 }
 
+/** Telegram 7.0+ preserves the WebView when opening its bot chat. Never close it. */
+export function showFileChat(url: string) {
+  if (telegram?.openTelegramLink && supports('7.0')) telegram.openTelegramLink(url);
+}
+
 export function useTelegramBack(visible: boolean, onBack: () => void) {
   useEffect(() => {
     if (!supports('6.1')) return;

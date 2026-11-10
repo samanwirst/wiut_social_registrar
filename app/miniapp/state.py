@@ -8,6 +8,7 @@ from aiohttp import web
 from app.broadcasts import BroadcastRepository
 from app.event_repository import EventRepository
 from app.events.table import EventTable
+from app.services.chat_files import ChatFiles
 from app.services.qr_designer import QrDesigner
 from app.services.runtime_health import RuntimeHealth
 
@@ -19,3 +20,4 @@ HEALTH = web.AppKey("runtime_health", RuntimeHealth)
 TABLE = web.AppKey("event_table", EventTable)
 BROADCASTS = web.AppKey("broadcasts", BroadcastRepository)
 EXPORT_LOCK = web.AppKey("participant_export_lock", asyncio.Lock)
+CHAT_FILES = web.AppKey("chat_files", ChatFiles)

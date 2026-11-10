@@ -129,5 +129,26 @@ leading zeroes/long text, typed values, duplicate headers, literal formula-like 
 forms, and expired values. The same repository/API checks run on SQLite and PostgreSQL.
 Unsigned/forged identities and other organizers cannot download a form. Thread/cancellation
 checks ensure workbook construction leaves the event loop responsive and retains its slot
-until completion. Browser QA downloads and opens a 12-person workbook from the second page,
+until completion. Browser QA captures the mocked Telegram upload and opens a two-person selected workbook from the second page,
 checks edited values, and exercises failure/retry without changing table position or selection.
+
+Chat-file regressions exercise signed ownership/recipient enforcement, both PNG backgrounds,
+restored design bytes, valid workbook uploads, request-ID replay/reuse rejection, active/cache
+limits, rate limits, preparation errors, Telegram rejection/flood/network ambiguity without
+automatic resend, disconnected clients, and shutdown draining. Browser QA follows the real
+button → signed POST → repository → mocked Telegram upload path for both files. It checks
+that the plain bot link opens with no `close()` call or browser download, pending polls don't
+resubmit, errors remain visible, and table/QR state survives the handoff. Native Telegram
+window/tab presentation still requires a real client check; the SDK stub cannot prove it.
+
+Selection regressions verify disabled export with zero selections, selecting/unselecting a
+page, selections across pages, exact uploaded workbook rows, retained answer/custom values,
+foreign-form rejection, invalid/empty IDs, and request-ID selection conflicts. Browser geometry
+checks compare both checkbox layers against their 44px label in phone/desktop, light/dark,
+Android/iOS layouts, including keyboard selection.
+
+Workbook metadata checks verify the versioned export contract, selected/full scope and
+counts, exact large IDs stored as text, UTC conversions, stable question/column keys,
+reserved-header collisions, visible explanatory worksheets, and hidden IDs inside the
+sortable table. Choice lists round-trip through JSON even with multiline option labels;
+expired answers remain absent. Literal-text protection applies to every worksheet.
