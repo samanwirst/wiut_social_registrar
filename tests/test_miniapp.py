@@ -120,7 +120,8 @@ async def test_owner_can_configure_event_and_view_qr_and_participants(client):
     )
     assert (await qr.read()).startswith(b"\x89PNG\r\n\x1a\n")
     response = await client.get(f"/api/events/{client.event_id}/members", headers=headers())
-    assert (await response.json())["total"] == 0
+    page = await response.json()
+    assert page["total"] == 0 and page["member_ids"] == []
 
 
 @pytest.mark.asyncio

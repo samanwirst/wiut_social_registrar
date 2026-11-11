@@ -35,6 +35,7 @@ class MembersPage:
     pages: int
     members: list[dict]
     export_scope: str = "all"
+    member_ids: list[int] = field(default_factory=list)
 
 
 class EventQueries:
@@ -129,8 +130,26 @@ class EventQueries:
             for item in values:
                 for key in ("registration_id", "row_revision", "registered_at", "editable_until"):
                     item.pop(key)
+        # Selection spans the whole owned form; contacts and answers stay paginated.
+        member_ids = (
+            list(
+                await session.scalars(
+                    select(EventRegistration.telegram_user_id)
+                    .where(EventRegistration.event_id == event.id)
+                    .order_by(EventRegistration.telegram_user_id)
+                )
+            )
+            if extended and not export
+            else []
+        )
         return MembersPage(
-            event, total, page, pages, values, "selected" if selected is not None else "all"
+            event,
+            total,
+            page,
+            pages,
+            values,
+            "selected" if selected is not None else "all",
+            member_ids,
         )
 
     async def answer_page(self, user_id, event_id, page=0, *, export=False, selected=None):

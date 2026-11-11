@@ -141,10 +141,10 @@ that the plain bot link opens with no `close()` call or browser download, pendin
 resubmit, errors remain visible, and table/QR state survives the handoff. Native Telegram
 window/tab presentation still requires a real client check; the SDK stub cannot prove it.
 
-Selection regressions verify disabled export with zero selections, selecting/unselecting a
-page, selections across pages, exact uploaded workbook rows, retained answer/custom values,
-foreign-form rejection, invalid/empty IDs, and request-ID selection conflicts. Browser geometry
-checks compare both checkbox layers against their 44px label in phone/desktop, light/dark,
+Selection regressions verify disabled export with zero selections, selecting/unselecting
+all participants across pages, individual exclusions, exact uploaded workbook rows and message
+audiences, retained answer/custom values, foreign-form rejection, invalid/empty IDs, and
+request-ID selection conflicts. Browser geometry checks compare both checkbox layers against their 44px label in phone/desktop, light/dark,
 Android/iOS layouts, including keyboard selection.
 
 Workbook metadata checks verify the versioned export contract, selected/full scope and

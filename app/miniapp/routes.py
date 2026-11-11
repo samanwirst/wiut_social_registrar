@@ -78,6 +78,7 @@ async def event_members(request):
     return web.json_response(
         {
             "members": page.members,
+            "member_ids": page.member_ids,
             "page": page.page,
             "pages": page.pages,
             "total": page.total,

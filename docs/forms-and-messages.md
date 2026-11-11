@@ -46,9 +46,10 @@ editing window. Expired values disappear immediately and are physically cleaned 
 Attendance and the verified student profile remain permanent.
 
 The green **Export .xlsx** button beside **Prepare message** sends only the selected participants
-to the owner's private bot chat. It stays disabled with no selection. Row and page checkboxes
-share one selection across pages for both exports and messages. Uncheck rows or the current
-page to remove them from the selection. The Participants worksheet contains contacts, education level,
+to the owner's private bot chat. It stays disabled with no selection. The header checkbox
+selects every participant across all pages; row checkboxes allow individual exclusions.
+Both exports and messages use the same selection. Unchecking the header clears the entire
+selection. The Participants worksheet contains contacts, education level,
 current question responses, and organizer columns, with a standard Excel table, filters,
 wrapped text, and frozen headers/identity columns. IDs and phone numbers stay literal text;
 numeric/date/checkbox columns keep their supported types. All user text is written as text,
@@ -110,8 +111,8 @@ files contain no macros or external links.
 
 ## Message selected people
 
-1. Select individual row checkboxes or the current page. The count includes selections
-   across pages. Uncheck a row or the current page to remove it.
+1. Select individual row checkboxes or use the header checkbox to select everyone across
+   all pages. Uncheck a row to exclude it, or uncheck the header to clear the entire selection.
 2. Choose **Prepare message**. This saves an idempotent audience draft and immediately
    opens the bot chat to compose the message; recipients receive nothing yet.
 3. Reply to **Write your message** using Telegram's own formatting: bold, italic, links,
