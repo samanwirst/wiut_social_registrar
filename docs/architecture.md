@@ -136,6 +136,9 @@ Components render the existing TelegramUI interface. Focused hooks own shared be
 
 API transport stays in `api.ts`. It sends signed `initData`, times out both headers and body,
 and never caches personal responses. The backend checks organizer status and event ownership.
+Member pages include an owner-scoped snapshot of every participant ID, while contact and
+answer rows remain paginated. The header checkbox selects or clears that entire snapshot;
+exports and message drafts still validate the explicit selected IDs against the owned form.
 Browser state is not an authorization source. QR generation stays lazy on its own tab, and
 students complete questionnaires in the bot chat.
 

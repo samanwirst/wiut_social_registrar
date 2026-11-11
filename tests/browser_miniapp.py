@@ -761,24 +761,74 @@ async def main():
                     == 1
                 )
                 await assert_native_geometry(page, "base")
-                await page.get_by_label("Select this page", exact=True).locator("..").click()
-                await page.get_by_text("10 selected across pages", exact=True).wait_for()
+                await page.get_by_label("Select all participants", exact=True).locator("..").click()
+                await page.get_by_text("12 selected across pages", exact=True).wait_for()
+                assert await page.locator("tbody input[type=checkbox]:checked").count() == 10
+                await page.get_by_role("button", name="Next", exact=True).click()
+                await page.get_by_text("Page 2 of 2", exact=True).wait_for()
+                assert await page.get_by_label("Select all participants", exact=True).is_checked()
+                assert await page.locator("tbody input[type=checkbox]:checked").count() == 2
+                await page.get_by_label("Select Student 1011", exact=True).locator("..").click()
+                await page.get_by_text("11 selected across pages", exact=True).wait_for()
+                await page.get_by_role("button", name="Previous", exact=True).click()
+                await page.get_by_text("Page 1 of 2", exact=True).wait_for()
+                assert await page.locator("tbody input[type=checkbox]:checked").count() == 10
+                assert (
+                    await page.get_by_label("Select all participants", exact=True).get_attribute(
+                        "aria-checked"
+                    )
+                    == "mixed"
+                )
+                await page.get_by_role("button", name="Next", exact=True).click()
+                await page.get_by_text("Page 2 of 2", exact=True).wait_for()
+                await page.get_by_label("Select Student 1011", exact=True).locator("..").click()
+                await page.get_by_text("12 selected across pages", exact=True).wait_for()
+                # One global snapshot feeds both file exports and message audiences.
+                all_path = OUT / "participants-all-pages.xlsx"
+                await send_chat_file(
+                    page,
+                    "Export .xlsx",
+                    f"participants-{career.id}.xlsx",
+                    all_path,
+                    selected_ids=list(range(1000, 1012)),
+                )
+                all_book = load_workbook(all_path)
+                assert all_book["Participants"].max_row == 13
+                assert {
+                    row[0]
+                    for row in all_book["Participants"].iter_rows(min_row=2, values_only=True)
+                } == {str(user_id).zfill(8) for user_id in range(1000, 1012)}
+                all_book.close()
+                async with page.expect_response(
+                    lambda response: (
+                        response.request.method == "POST" and response.url.endswith("/broadcasts")
+                    )
+                ) as prepared_all:
+                    await page.get_by_role("button", name="Prepare message", exact=True).click()
+                all_draft = await (await prepared_all.value).json()
+                assert all_draft["total"] == 12
+                assert (await prepared_all.value).request.post_data_json["recipient_ids"] == list(
+                    range(1000, 1012)
+                )
                 assert await export_button.is_enabled()
-                await page.get_by_label("Select this page", exact=True).locator("..").click()
+                await page.get_by_label("Select all participants", exact=True).locator("..").click()
                 await page.get_by_text("0 selected", exact=True).wait_for()
                 assert await export_button.is_disabled()
+                await page.get_by_role("button", name="Previous", exact=True).click()
+                await page.get_by_text("Page 1 of 2", exact=True).wait_for()
+                assert await page.locator("tbody input[type=checkbox]:checked").count() == 0
                 first_checkbox = page.get_by_label("Select Student 1000", exact=True)
                 await first_checkbox.focus()
                 await first_checkbox.press("Space")
                 assert await page.get_by_label("Select Student 1000", exact=True).is_checked()
                 assert (
-                    await page.get_by_label("Select this page", exact=True).get_attribute(
+                    await page.get_by_label("Select all participants", exact=True).get_attribute(
                         "aria-checked"
                     )
                     == "mixed"
                 )
                 await expect(
-                    page.get_by_label("Select this page", exact=True)
+                    page.get_by_label("Select all participants", exact=True)
                     .locator("..")
                     .locator("div[aria-hidden=true]")
                 ).to_have_css("opacity", "1")
@@ -1228,7 +1278,7 @@ async def main():
                 await browser.close()
             assert not browser_errors, browser_errors
             print(
-                "Browser QA passed: chat delivery of XLSX and original QR PNG, preserved Mini App state, lost-response deduplication, legacy SDK fallback, full answers, MCQ forms, pagination, and Android/iOS light/dark layouts at 320/390/900px."
+                "Browser QA passed: all-page selection for XLSX/message audiences, chat delivery of XLSX and original QR PNG, preserved Mini App state, lost-response deduplication, legacy SDK fallback, full answers, MCQ forms, pagination, and Android/iOS light/dark layouts at 320/390/900px."
             )
             print("Synthetic screenshots:", OUT)
         finally:

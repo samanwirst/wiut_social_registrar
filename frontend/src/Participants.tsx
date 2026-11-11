@@ -57,8 +57,8 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
         : { organizer_values: { ...member.organizer_values, [change.field]: change.value } }),
     })),
   }) : previous);
-  const allPage = Boolean(data?.members.length && data.members.every(member => selected.has(member.telegram_id)));
-  const partialPage = !allPage && Boolean(data?.members.some(member => selected.has(member.telegram_id)));
+  const allSelected = Boolean(data?.member_ids.length && data.member_ids.every(id => selected.has(id)));
+  const partiallySelected = !allSelected && Boolean(data?.member_ids.some(id => selected.has(id)));
   const detailMember = data?.members.find(member => member.telegram_id === detail?.memberId);
   const detailField = detail && (detail.scope === 'answer' ? data?.questions : data?.columns)?.find(field => field.id === detail.fieldId);
 
@@ -80,8 +80,8 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
       <Button type="button" mode="bezeled" onClick={reload}>Try again</Button>} />
       : loading ? <div className="loading" role="status"><Spinner size="m" /><span>Loading participants…</span></div>
       : data && data.members.length ? <div className="scroll-table" tabIndex={0} role="region" aria-label="Participant contacts and answers">
-        <table><thead><tr><th scope="col" className="selection-cell"><Checkbox aria-label="Select this page" aria-checked={partialPage ? 'mixed' : allPage} checked={allPage} indeterminate={partialPage} disabled={preparing} onChange={e => {
-          const next = new Set(selected); data.members.forEach(member => { if (e.target.checked) next.add(member.telegram_id); else next.delete(member.telegram_id); }); changeSelection(next);
+        <table><thead><tr><th scope="col" className="selection-cell"><Checkbox aria-label="Select all participants" aria-checked={partiallySelected ? 'mixed' : allSelected} checked={allSelected} indeterminate={partiallySelected} disabled={preparing} onChange={e => {
+          changeSelection(new Set(e.target.checked ? data.member_ids : []));
         }} /></th>{['Student ID', 'Name', 'Telegram', 'Email', 'Phone', 'Level', ...data.questions.map(q => q.label), ...data.columns.map(c => c.label)]
           .map((label, index) => <th scope="col" key={index}>{label}</th>)}</tr></thead>
           <tbody>{data.members.map(member => <tr key={member.telegram_id}>

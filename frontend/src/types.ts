@@ -55,5 +55,5 @@ export interface Member {
   editable_until: string;
 }
 
-export interface MembersPage extends Pagination { members: Member[]; questions: Question[]; columns: TableColumn[]; columns_revision: number }
+export interface MembersPage extends Pagination { members: Member[]; member_ids: number[]; questions: Question[]; columns: TableColumn[]; columns_revision: number }
 export type Notify = (message: string, error?: boolean) => void;

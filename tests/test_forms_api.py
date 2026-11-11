@@ -1,12 +1,62 @@
 from uuid import uuid4
 
 import pytest
+from aiogram.types import User
 
 from app.miniapp.state import BROADCASTS
+from registrar.models import Student
 from tests import test_miniapp
+from tests.helpers import complete_student_registration
 from tests.test_miniapp import headers
 
 miniapp_client = test_miniapp.client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resource", ["forms", "events"])
+async def test_member_selection_covers_every_page_of_only_the_owned_form(
+    miniapp_client, repository, resource
+):
+    client = miniapp_client
+    ids = list(range(1000, 1012))
+    for user_id in ids:
+        await repository.touch_user(User(id=user_id, is_bot=False, first_name="Synthetic"))
+        await complete_student_registration(
+            repository,
+            user_id,
+            Student(
+                str(user_id).zfill(8),
+                "Synthetic student",
+                f"{user_id}@example.test",
+                account=f"{user_id}@example.test",
+            ),
+            education_level="CIFS",
+            code="123456",
+        )
+        await client.events.visit(user_id, client.event_id)
+    other = await client.events.create(200, "Separate form")
+    await client.events.visit(200, other.id)
+    prefix = f"/api/{resource}/{client.event_id}"
+    for page_number, count in [(0, 10), (1, 2)]:
+        response = await client.get(prefix + f"/members?page={page_number}", headers=headers())
+        assert response.status == 200
+        page = await response.json()
+        assert len(page["members"]) == count and page["total"] == 12
+        assert page["member_ids"] == ids
+    exported = await client.events.export_members(100, client.event_id, member_ids=ids)
+    assert {member["telegram_id"] for member in exported.members} == set(ids)
+    response = await client.post(
+        prefix + "/broadcasts",
+        headers=headers(),
+        json={"recipient_ids": ids, "request_id": str(uuid4())},
+    )
+    assert response.status == 201 and (await response.json())["total"] == len(ids)
+    assert (await client.get(prefix + "/members")).status == 401
+    assert (await client.get(prefix + "/members?user_id=100", headers=headers(200))).status == 400
+    own_page = await (
+        await client.get(f"/api/{resource}/{other.id}/members", headers=headers(200))
+    ).json()
+    assert own_page["member_ids"] == [200]
 
 
 @pytest.mark.asyncio
