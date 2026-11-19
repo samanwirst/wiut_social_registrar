@@ -4,11 +4,14 @@ import math
 from uuid import UUID
 
 from app.event_errors import EventError
+from app.media_answers import MEDIA_INSTRUCTIONS, MEDIA_QUESTIONS, validate_attachment
 
-QUESTION_TYPES = {"text", "number", "single_choice", "multiple_choice"}
+QUESTION_TYPES = {"text", "number", "single_choice", "multiple_choice", *MEDIA_QUESTIONS}
 
 
-def apply_question_response(question, previous, *, text=None, action=None, option=None):
+def apply_question_response(
+    question, previous, *, text=None, action=None, option=None, attachment=None
+):
     """Return a new answer set and whether to advance; no persistence or chat I/O."""
     key, kind = question["id"], question["type"]
     answers = dict(previous)
@@ -36,7 +39,13 @@ def apply_question_response(question, previous, *, text=None, action=None, optio
         answers.pop(key, None)
     elif text is not None and kind in {"text", "number"}:
         answers[key] = text.strip()
+    elif attachment is not None and kind in MEDIA_QUESTIONS:
+        answers[key] = validate_attachment(question, attachment)
     else:
+        if kind in MEDIA_QUESTIONS:
+            raise EventError(MEDIA_INSTRUCTIONS[kind])
+        if kind in {"text", "number"}:
+            raise EventError("Send your answer as a text message")
         raise EventError("Use the inline buttons to answer this question.")
     validate_answers([question], {key: answers.get(key)})
     return answers, True
@@ -102,7 +111,9 @@ def validate_answers(questions, answers):
             if question["required"]:
                 raise EventError(f"Please answer: {question['label']}")
             continue
-        if kind == "multiple_choice":
+        if kind in MEDIA_QUESTIONS:
+            value = validate_attachment(question, value)
+        elif kind == "multiple_choice":
             if (
                 not isinstance(value, list)
                 or len(value) > len(question["options"])

@@ -1,4 +1,6 @@
-export type QuestionType = 'text' | 'number' | 'single_choice' | 'multiple_choice';
+export type MediaType = 'photo' | 'document' | 'voice' | 'video' | 'audio' | 'animation' | 'video_note' | 'media';
+export type QuestionType = 'text' | 'number' | 'single_choice' | 'multiple_choice' | MediaType;
+export interface MediaAnswer { kind: MediaType; payload: string; url: string; file_name?: string; caption?: string; file_size?: number }
 
 export interface Question {
   id: string;
@@ -48,7 +50,7 @@ export interface Member {
   email: string;
   phone_number: string | null;
   education_level: string | null;
-  answers: Record<string, string | string[]> | null;
+  answers: Record<string, string | string[] | MediaAnswer> | null;
   answers_expires_at: string | null;
   organizer_values: Record<string, CellValue>;
   row_revision: number;

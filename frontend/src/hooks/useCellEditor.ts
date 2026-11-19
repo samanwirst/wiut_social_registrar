@@ -9,7 +9,8 @@ export interface CellEditorProps {
 }
 
 export function useCellEditor({ formId, member, definition, scope, columnsRevision, onSaved }: CellEditorProps, initialDraft?: CellValue) {
-  const value: CellValue = (scope === 'answer' ? member.answers?.[definition.id] : member.organizer_values[definition.id]) ?? null;
+  const rawValue = (scope === 'answer' ? member.answers?.[definition.id] : member.organizer_values[definition.id]) ?? null;
+  const value: CellValue = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? null : rawValue;
   const [draft, setDraft] = useState<CellValue>(() => initialDraft ?? value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');

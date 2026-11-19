@@ -30,6 +30,7 @@ preserves their public commands, API payloads, configuration, and database schem
 | Shared pagination bounds | `app/pagination.py` |
 | Question definitions, answer validation, and answer transitions | `app/event_forms.py` |
 | Persistent questionnaire progress | `app/surveys.py` |
+| Bounded Telegram attachment metadata and owner-only retrieval | `app/media_answers.py`, `app/events/media.py` |
 | Atomic cancellation of unfinished chat flows | `app/conversations.py` |
 | HTTP application wiring | `app/miniapp/application.py` |
 | Signed Telegram authentication | `app/miniapp/auth.py` |
@@ -93,6 +94,14 @@ Shared UTC clocks are injectable. Drafts expire after one hour of inactivity; fi
 default to 30 days. Expired answers are filtered on reads and physically deleted at startup
 and every ten minutes. The cleanup service runs without an HTTP server. It does not delete
 profiles, attendance, or analytics, and answer contents never enter those permanent tables.
+
+Media references live in the same temporary draft/answer JSON as text, without a schema
+change. Only Telegram messages can create them: direct form submission and organizer cell
+editing reject media references. Public projections remove Telegram file IDs. Owner-scoped
+`file_<registration>_<question>` bot links recheck ownership and answer expiry before sending
+the original media type. No file bytes are downloaded and no token-bearing URLs are exposed.
+Albums are rejected before advancing a question. All existing final-answer transaction rules
+and cleanup behavior apply to media.
 
 `/cancel` takes the user lock and clears unfinished identity fields, challenges, pending
 invitations, form drafts and unconfirmed composition in one transaction. Completed profiles,

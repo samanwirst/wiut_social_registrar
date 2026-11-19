@@ -35,6 +35,7 @@ from app.miniapp.state import CHAT_FILES
 from app.repositories import RegistrationRepository
 from app.services.qr_art import QrDesignError, scan_verified
 from app.services.qr_designer import QrDesigner
+from app.surveys import EventSurvey
 from registrar.models import Student
 from tests.browser_answers import answer_geometry, check_long_answers
 from tests.helpers import complete_student_registration, signed_init_data
@@ -1275,6 +1276,45 @@ async def main():
                 assert await legacy_page.evaluate(
                     "window.testComposeLink === undefined && window.testClosed === undefined"
                 )
+                # Media answers use the real form/API path and a mocked Telegram handoff.
+                media_form = await events.create(100, "Media Form QA")
+                await page.goto(f"http://127.0.0.1:{port}/")
+                await page.get_by_role("button", name="Media Form QA").click()
+                await page.get_by_role("tab", name="Questions", exact=True).click()
+                await page.get_by_role("button", name="Add question", exact=True).click()
+                await page.get_by_label("Question", exact=True).fill("Upload your CV")
+                answer_type = page.get_by_label("Answer type", exact=True)
+                options = await answer_type.locator("option").evaluate_all(
+                    "items => items.map(item => item.value)"
+                )
+                assert {"photo", "document", "voice", "video", "audio", "media"} <= set(options)
+                await answer_type.select_option("document")
+                await page.get_by_role("button", name="Save changes", exact=True).click()
+                await page.get_by_text("All changes saved", exact=True).wait_for()
+                media_form = await events.settings(100, media_form.id)
+                survey = EventSurvey(events)
+                await events.visit(1000, media_form.id)
+                await survey.begin(1000, media_form.id)
+                await survey.respond(
+                    1000,
+                    attachment={
+                        "kind": "document",
+                        "file_id": "synthetic-file-id",
+                        "file_unique_id": "synthetic-unique",
+                        "file_name": "CV.pdf",
+                    },
+                )
+                await page.get_by_role("tab", name="People", exact=True).click()
+                attachment_button = page.locator(".media-cell button")
+                await expect(attachment_button).to_contain_text("CV.pdf")
+                await attachment_button.click()
+                assert (await page.evaluate("window.testComposeLink")).startswith(
+                    "https://t.me/example_bot?start=file_"
+                )
+                assert await page.evaluate("window.testClosed === undefined")
+                await page.set_viewport_size({"width": 390, "height": 844})
+                await attachment_button.scroll_into_view_if_needed()
+                await page.screenshot(path=str(OUT / "media-answer-mobile.png"), full_page=True)
                 await browser.close()
             assert not browser_errors, browser_errors
             print(

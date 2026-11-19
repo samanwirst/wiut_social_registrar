@@ -7,6 +7,7 @@ from app.clock import utc_now
 from app.event_errors import EventError
 from app.events.access import owned_event, require_registered
 from app.events.selection import selected_member_ids
+from app.media_answers import MEDIA_QUESTIONS, public_attachment
 from app.models import (
     Event,
     EventAnswers,
@@ -189,7 +190,11 @@ class EventQueries:
                 )
             ).all()
             answers = {user_id: response for user_id, response in rows}
+            media_questions = {
+                q["id"] for q in members.event.questions if q["type"] in MEDIA_QUESTIONS
+            }
             for member in members.members:
+                registration_id = member["registration_id"]
                 member["organizer_values"] = table_values.get(member["registration_id"], {})
                 member["editable_until"] = (
                     member["editable_until"]
@@ -200,6 +205,15 @@ class EventQueries:
                     member.pop("registered_at")
                     member.pop("registration_id")
                 response = answers.get(member["telegram_id"])
-                member["answers"] = response.answers if response else None
+                member["answers"] = (
+                    {
+                        key: public_attachment(value, registration_id, key)
+                        if key in media_questions
+                        else value
+                        for key, value in response.answers.items()
+                    }
+                    if response
+                    else None
+                )
                 member["answers_expires_at"] = response.expires_at.isoformat() if response else None
         return members

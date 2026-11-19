@@ -100,7 +100,9 @@ class EventSurvey:
         forms = await self.repository.pending_forms(user_id)
         return await self.begin(user_id, forms[0].id) if forms else None
 
-    async def respond(self, user_id, *, text=None, token=None, action=None, option=None):
+    async def respond(
+        self, user_id, *, text=None, token=None, action=None, option=None, attachment=None
+    ):
         async with self.repository.db.transaction(write=True) as session:
             user = await session.scalar(
                 select(TelegramUser).where(TelegramUser.id == user_id).with_for_update()
@@ -133,6 +135,7 @@ class EventSurvey:
                 text=text,
                 action=action,
                 option=option,
+                attachment=attachment,
             )
             if not advance:
                 draft.answers, draft.expires_at = answers, now + FORM_SESSION_TTL

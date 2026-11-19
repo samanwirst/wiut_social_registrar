@@ -4,6 +4,7 @@ from app.clock import utc_now
 from app.event_errors import EventError
 from app.events.enrollment import EventEnrollment
 from app.events.links import event_id_from_payload
+from app.events.media import submitted_attachment
 from app.events.queries import EventQueries, MembersPage, OwnedEventsPage
 from app.events.retention import EventAnswerRetention
 from app.events.settings import EventSettingsRepository
@@ -69,6 +70,9 @@ class EventRepository:
 
     async def export_members(self, user_id, event_id, *, member_ids=None):
         return await self.queries.answer_page(user_id, event_id, export=True, selected=member_ids)
+
+    async def attachment(self, user_id, payload):
+        return await submitted_attachment(self.db, user_id, payload, self.clock())
 
     async def purge_answers(self, user_id=None, event_id=None):
         return await self.retention.purge_answers(user_id, event_id)

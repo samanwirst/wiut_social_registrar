@@ -15,6 +15,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from app.clock import utc_now
 from app.event_errors import EventError
+from app.media_answers import MEDIA_LABELS
 from app.services.participant_export_schema import export_columns, export_info, utc_timestamp
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -59,6 +60,15 @@ def headers(labels):
 def cell_value(value, kind):
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("kind") in MEDIA_LABELS:
+        return "\n".join(
+            text(item)
+            for item in [
+                value.get("file_name") or MEDIA_LABELS[value["kind"]],
+                value.get("caption"),
+            ]
+            if item
+        )
     if isinstance(value, list):
         return "\n".join(text(item) for item in value)
     if type(value) is bool:

@@ -3,6 +3,7 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message, ReplyKeyboardRemove
 
 from app.chat_formatting import card, error_text, event_confirmation
+from app.dialogs.attachments import show_attachment
 from app.dialogs.broadcasts import open_composer, show_sent_message
 from app.dialogs.registration import code_prompt, prompt_remaining_profile_fields, welcome
 from app.dialogs.surveys import resume_survey, send_question
@@ -21,6 +22,9 @@ async def cmd_start(
     can_open_panel=False,
     broadcast_repository=None,
 ) -> None:
+    if command.args and command.args.startswith("file_"):
+        await show_attachment(message, event_repository, command.args)
+        return
     if command.args and command.args.startswith("message_"):
         if broadcast_repository is not None:
             await show_sent_message(

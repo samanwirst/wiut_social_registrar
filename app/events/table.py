@@ -8,6 +8,7 @@ from app.clock import utc_now
 from app.event_errors import EventError
 from app.event_forms import validate_answers
 from app.events.access import owned_event
+from app.media_answers import MEDIA_QUESTIONS
 from app.models import EventAnswers, EventRegistration, EventTableValues
 from app.table_fields import column_value, validate_columns
 
@@ -98,6 +99,8 @@ class EventTable:
                 question = next((q for q in event.questions if q["id"] == key), None)
                 if question is None:
                     raise EventError("Choose a question belonging to this form")
+                if question["type"] in MEDIA_QUESTIONS:
+                    raise EventError("Attachments can only be submitted by the student in chat")
                 if (
                     question["type"] == "multiple_choice"
                     and isinstance(value, list)

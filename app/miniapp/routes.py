@@ -75,6 +75,13 @@ async def event_members(request):
     page = await request.app[REPOSITORY].answer_page(
         request[USER], request.match_info["event_id"], page_number(request)
     )
+    bot_username = None
+    for member in page.members:
+        for value in (member.get("answers") or {}).values():
+            if isinstance(value, dict) and "payload" in value:
+                if bot_username is None:
+                    bot_username = (await request.app[BOT].me()).username
+                value["url"] = f"https://t.me/{bot_username}?start={value['payload']}"
     return web.json_response(
         {
             "members": page.members,

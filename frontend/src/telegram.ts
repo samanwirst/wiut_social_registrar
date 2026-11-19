@@ -27,8 +27,8 @@ declare global {
 export const telegram = window.Telegram?.WebApp;
 export const supports = (version: string) => telegram?.isVersionAtLeast?.(version) !== false;
 
-export function openTelegramChat(url: string) {
-  if (telegram?.openTelegramLink) { telegram.openTelegramLink(url); telegram.close?.(); }
+export function openTelegramChat(url: string, { close = true }: { close?: boolean } = {}) {
+  if (telegram?.openTelegramLink) { telegram.openTelegramLink(url); if (close) telegram.close?.(); }
   else window.open(url, '_blank', 'noopener,noreferrer');
 }
 

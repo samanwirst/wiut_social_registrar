@@ -5,6 +5,7 @@ from sqlalchemy import delete, or_, select
 from app.clock import utc_now
 from app.event_errors import EventError
 from app.event_forms import validate_answers
+from app.media_answers import MEDIA_QUESTIONS
 from app.models import (
     Event,
     EventAnswers,
@@ -198,6 +199,8 @@ class EventEnrollment:
             )
             if event is None:
                 raise EventError("This event does not exist.")
+            if any(question["type"] in MEDIA_QUESTIONS for question in event.questions):
+                raise EventError("Complete attachment questions in the bot chat")
             return event, await self.submit_answers_in_transaction(
                 session, user, event, answers, form_revision
             )

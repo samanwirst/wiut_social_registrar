@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import { Button, Caption, Checkbox, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
 import { api, errorMessage } from './api';
 import { EditableCell } from './EditableCell';
+import { MediaCell, mediaTypes } from './MediaCell';
 import { TableColumns } from './TableColumns';
 import { Broadcasts } from './Broadcasts';
 import { AnswerDetails } from './AnswerDetails';
@@ -10,7 +11,7 @@ import { openTelegramChat } from './telegram';
 import { useRemoteResource } from './hooks/useRemoteResource';
 import { Pagination } from './Pagination';
 import { ExportParticipants } from './ExportParticipants';
-import type { Broadcast, CellChange, MembersPage } from './types';
+import type { Broadcast, CellChange, MediaAnswer, MembersPage } from './types';
 
 function Contact({ value, prefix }: { value: string | null; prefix: string }) {
   return value ? <a href={prefix + value} target="_blank" rel="noopener noreferrer">{value}</a> : <>—</>;
@@ -93,7 +94,9 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
               : <a href={`tg://user?id=${member.telegram_id}`}>Open profile</a>}</td>
             <td><Contact value={member.email} prefix="mailto:" /></td>
             <td><Contact value={member.phone_number} prefix="tel:" /></td><td>{member.education_level || '—'}</td>
-            {data.questions.map(q => <EditableCell key={q.id} formId={eventId} member={member} definition={q} scope="answer" columnsRevision={data.columns_revision} onSaved={cellSaved}
+            {data.questions.map(q => mediaTypes.has(q.type)
+              ? <MediaCell key={q.id} value={(member.answers?.[q.id] as MediaAnswer | undefined) ?? null} />
+              : <EditableCell key={q.id} formId={eventId} member={member} definition={q} scope="answer" columnsRevision={data.columns_revision} onSaved={cellSaved}
               onExpand={initialDraft => openDetail(member.telegram_id, q.id, 'answer', initialDraft)} />)}
             {data.columns.map(c => <EditableCell key={c.id} formId={eventId} member={member} definition={c} scope="column" columnsRevision={data.columns_revision} onSaved={cellSaved}
               onExpand={initialDraft => openDetail(member.telegram_id, c.id, 'column', initialDraft)} />)}
