@@ -221,6 +221,10 @@ completed profiles, completed submissions, rate limits and already confirmed del
 Old verification codes, question buttons and cancelled message previews cannot resume the
 cancelled flow. Use `/start` or scan the form's QR to begin again.
 
+Closing a form rejects new scans and unfinished form submissions with **Registration closed**.
+If the organizer closes it while a student is verifying their profile, the profile can still
+be completed, but the bot reports that the form is closed and does not claim participation.
+
 Choice answers retain their existing storage format. Previously saved selections and questionnaire tokens survive upgrades; options and **Continue** buttons from the old multi-select UI remain valid for the current question. Choosing an option preserves earlier selections for that question and advances immediately. No migration or form-revision change is needed.
 
 Unfinished answers are stored separately in `event_form_sessions` for **one hour of inactivity**, so restarts do not lose progress. They are removed after expiration or successful submission. Final answers live only in `event_answers`, with their own expiration timestamp; neither profile tables nor analytics events receive their contents. The final answer, questionnaire removal, and form enrollment commit in one database transaction. Repeated QR scans or old inline buttons cannot create duplicate participation or overwrite answers. Questions become immutable after the first submitted questionnaire, even after its answers expire, to preserve their meaning. Form details and registration status remain editable in the Mini App.

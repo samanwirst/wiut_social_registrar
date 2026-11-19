@@ -66,8 +66,9 @@ async def discard_other_pending_events(session, user_id, event_id):
 
 async def enroll_pending_events(session, insert, user, now):
     """Called inside the same transaction that completes the student's registration."""
+    outcomes = {"registered": [], "questions": [], "closed": []}
     if not registration_complete(user):
-        return
+        return outcomes
     event_ids = list(
         (
             await session.scalars(
@@ -81,15 +82,20 @@ async def enroll_pending_events(session, insert, user, now):
         event = await session.scalar(select(Event).where(Event.id == event_id).with_for_update())
         existing = await existing_registration(session, user, event_id)
         if event.questions and event.registration_open and existing is None:
+            outcomes["questions"].append(event.title)
             continue
         if event.registration_open and existing is None:
             await enroll(session, insert, user, event_id, now)
+        outcomes[
+            "closed" if not event.registration_open and existing is None else "registered"
+        ].append(event.title)
         await session.execute(
             delete(PendingEventRegistration).where(
                 PendingEventRegistration.telegram_user_id == user.id,
                 PendingEventRegistration.event_id == event_id,
             )
         )
+    return outcomes
 
 
 class EventEnrollment:
@@ -120,7 +126,9 @@ class EventEnrollment:
                 else None
             )
             if not event.registration_open and not existing:
-                raise EventError("Registration for this event is closed.")
+                raise EventError(
+                    f"Registration closed\n\n{event.title}\nThe organizer is no longer accepting responses"
+                )
             await discard_other_pending_events(session, user_id, event_id)
             registered = registration_complete(user)
             if not registered or (event.questions and existing is None):
@@ -211,7 +219,9 @@ class EventEnrollment:
         registration_id = None
         if existing is None:
             if not event.registration_open:
-                raise EventError("Registration for this event is closed.")
+                raise EventError(
+                    f"Registration closed\n\n{event.title}\nThe organizer is no longer accepting responses"
+                )
             if type(form_revision) is not int or form_revision != event.form_revision:
                 raise EventError(
                     "The event form changed. Send /start to load the updated questions."

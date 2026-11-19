@@ -115,6 +115,9 @@ After polling stops, the update-drain middleware waits for active chat handlers,
 updates queued on a student's isolation lock, before database and network clients close.
 Already committed registration stages and questionnaire tokens remain in the database.
 
+Profile completion returns pending enrollment outcomes from its own transaction. Closed forms
+are reported separately rather than being included in a successful participation message.
+
 ## Graph and console
 
 `registrar/` remains a synchronous, independently usable package. `GraphClient` owns

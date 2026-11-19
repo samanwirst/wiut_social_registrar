@@ -33,6 +33,8 @@ cover code/phone/education/form stages, stale buttons, preserved completed data 
 and the distinction between unconfirmed composition and confirmed deliveries. Browser QA
 creates a file question and opens its answer through the mocked Telegram SDK.
 
+Closed-registration cases include new scans and closure while student verification is in progress.
+
 Notification-policy checks cover transient error suppression, confirmed outages, grouped
 availability symptoms, dependency inhibition, stable recovery, per-recipient delivery tracking,
 obsolete queue removal, removed administrators, monitor gaps/incomplete probes, and migration
