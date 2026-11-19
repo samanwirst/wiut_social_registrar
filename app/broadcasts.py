@@ -3,7 +3,7 @@
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 
 from app.clock import utc_now
 from app.event_errors import EventError
@@ -17,8 +17,9 @@ MAX_RECIPIENTS = 2000
 
 
 class BroadcastRepository:
-    def __init__(self, database, *, clock=utc_now):
+    def __init__(self, database, *, clock=utc_now, admin_ids=()):
         self.db, self.clock = database, clock
+        self.admin_ids = frozenset(admin_ids)
 
     async def _lock_owner(self, session, owner):
         user = await session.scalar(
@@ -31,18 +32,50 @@ class BroadcastRepository:
         await require_registered(session, owner)
         query = (
             select(Broadcast)
-            .join(Event, Event.id == Broadcast.event_id)
+            .outerjoin(Event, Event.id == Broadcast.event_id)
             .where(
                 Broadcast.id == draft_id,
                 Broadcast.owner_id == owner,
-                Event.creator_telegram_user_id == owner,
-                Event.anonymous.is_(False),
+                or_(
+                    and_(Event.creator_telegram_user_id == owner, Event.anonymous.is_(False)),
+                    and_(Broadcast.event_id.is_(None), owner in self.admin_ids),
+                ),
             )
         )
         draft = await session.scalar(query.with_for_update(of=Broadcast) if lock else query)
         if draft is None:
             raise EventError("This message is unavailable or belongs to another organizer")
         return draft
+
+    async def _check_draft_limit(self, session, owner):
+        recent = await session.scalar(
+            select(func.count())
+            .select_from(Broadcast)
+            .where(
+                Broadcast.owner_id == owner,
+                Broadcast.created_at > self.clock() - timedelta(hours=1),
+            )
+        )
+        if recent >= 20:
+            raise EventError("Too many message drafts — try again in an hour")
+
+    async def _add_audience(self, session, draft, recipients):
+        session.add(draft)
+        await session.flush()
+        session.add_all(
+            [
+                BroadcastRecipient(
+                    broadcast_id=draft.id,
+                    telegram_user_id=recipient,
+                    status="pending",
+                    attempts=0,
+                    next_attempt_at=self.clock(),
+                    updated_at=self.clock(),
+                )
+                for recipient in recipients
+            ]
+        )
+        await session.flush()
 
     async def _counts(self, session, draft):
         rows = await session.execute(
@@ -112,16 +145,7 @@ class BroadcastRepository:
             )
             if valid != set(recipients):
                 raise EventError("Choose only people registered for your form")
-            recent = await session.scalar(
-                select(func.count())
-                .select_from(Broadcast)
-                .where(
-                    Broadcast.owner_id == owner,
-                    Broadcast.created_at > self.clock() - timedelta(hours=1),
-                )
-            )
-            if recent >= 20:
-                raise EventError("Too many message drafts — try again in an hour")
+            await self._check_draft_limit(session, owner)
             draft = Broadcast(
                 id=draft_id,
                 event_id=event_id,
@@ -133,22 +157,55 @@ class BroadcastRepository:
                 created_at=self.clock(),
                 expires_at=self.clock() + timedelta(days=1),
             )
-            session.add(draft)
-            await session.flush()
-            session.add_all(
-                [
-                    BroadcastRecipient(
-                        broadcast_id=draft_id,
-                        telegram_user_id=recipient,
-                        status="pending",
-                        attempts=0,
-                        next_attempt_at=self.clock(),
-                        updated_at=self.clock(),
-                    )
-                    for recipient in sorted(valid)
-                ]
+            await self._add_audience(session, draft, sorted(valid))
+            return await self._snapshot(session, draft)
+
+    async def prepare_announcement(self, owner, request_id, source_message_id, content_kind):
+        """Freeze the bot's complete audience for an administrator's exact Telegram preview."""
+        if owner not in self.admin_ids:
+            raise EventError("Only administrators can prepare announcements")
+        try:
+            draft_id = str(UUID(request_id))
+        except (ValueError, TypeError, AttributeError):
+            raise EventError("Supply a unique message request ID") from None
+        if type(source_message_id) is not int or source_message_id <= 0:
+            raise EventError("Supply the saved Telegram preview")
+        if content_kind not in {"text", "rich_message", "photo", "document"}:
+            raise EventError("Use a supported announcement message")
+        async with self.db.transaction(write=True) as session:
+            await self._lock_owner(session, owner)
+            existing = await session.get(Broadcast, draft_id)
+            if existing is not None:
+                if (
+                    existing.owner_id != owner
+                    or existing.event_id is not None
+                    or existing.source_message_id != source_message_id
+                    or existing.content_kind != content_kind
+                ):
+                    raise EventError("This message request ID is already in use")
+                return await self._snapshot(session, existing)
+            recipients = list(
+                await session.scalars(
+                    select(TelegramUser.id).order_by(TelegramUser.id).limit(MAX_RECIPIENTS + 1)
+                )
             )
-            await session.flush()
+            if not 1 <= len(recipients) <= MAX_RECIPIENTS:
+                raise EventError(f"Announcements support 1 to {MAX_RECIPIENTS} users")
+            await self._check_draft_limit(session, owner)
+            draft = Broadcast(
+                id=draft_id,
+                event_id=None,
+                owner_id=owner,
+                status="preview",
+                revision=1,
+                source_message_id=source_message_id,
+                content_kind=content_kind,
+                total=len(recipients),
+                counts={},
+                created_at=self.clock(),
+                expires_at=self.clock() + timedelta(days=1),
+            )
+            await self._add_audience(session, draft, recipients)
             return await self._snapshot(session, draft)
 
     async def get(self, owner, draft_id):

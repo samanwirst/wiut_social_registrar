@@ -157,7 +157,8 @@ Ambiguous mail submission is never automatically retried. MSAL owns authenticati
 Normal startup defers Outlook availability to `RuntimeHealth`; strict diagnostic mode still
 requires it. A timed-out Outlook probe stays attached and does not enqueue another read.
 No email submission is retried by monitoring. Administrator IDs grant notification delivery
-only. See [monitoring.md](monitoring.md) for probe thresholds and operational limitations.
+and confirmation of their own administrator announcements. They do not grant access to other
+organizers' forms. See [monitoring.md](monitoring.md) for probe thresholds and operational limitations.
 `RegistrationService` only composes fixed verification email delivery with challenge
 reservation/status updates. Arbitrary email remains an explicitly confirmed console feature.
 The CLI separates argument parsing, a single lookup/email command, and interactive lookup.
@@ -278,6 +279,16 @@ claims are recorded as unknown instead of replayed. Cancellation stops pending w
 rejected in-flight work being requeued. Thirty days later recipient rows/source references are
 removed; aggregate counts remain. Worker startup/shutdown and safe health reporting belong to
 BotApp. The worker operates even without the HTTP server.
+
+Administrator announcements use the same durable queue with a null `event_id`, rather than
+creating artificial forms or enrollments. An explicit operator preparation freezes all saved
+Telegram user IDs, including incomplete registrations, and references an already prepared native
+Telegram preview. `BOT_ADMIN_IDS` authorizes preparation and owner-scoped confirmation. A preview
+is never claimed by the worker; only its authenticated `Send to everyone` callback can queue it.
+The saved Telegram message is copied unchanged, with no form attribution. Replays reuse the same
+audience and revision, and previews expire after one day. Anonymous form APIs and ordinary form
+broadcast ownership remain unchanged. Migration `0010_administrator_announcements` preserves
+existing recipient rows when SQLite recreates the parent table and restores FK enforcement.
 
 The Mini App uses labeled TelegramUI checkboxes, typed inline cell editors, optimistic revisions,
 explicit saves, and the native Telegram link handoff. It stores neither selections nor table data

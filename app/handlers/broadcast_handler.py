@@ -32,7 +32,9 @@ async def broadcast_action(callback, broadcast_repository):
             draft = await broadcast_repository.queue(callback.from_user.id, draft_id, revision)
             await callback.answer("Message queued")
             await callback.message.answer(
-                f"Your message is {draft['status']} for {recipient_count(draft['total'])}\nFinished messages appear at the bottom of the form's People tab"
+                f"Your message is {draft['status']} for {draft['total']} users"
+                if draft["event_id"] is None
+                else f"Your message is {draft['status']} for {recipient_count(draft['total'])}\nFinished messages appear at the bottom of the form's People tab"
             )
         elif action == "stop":
             await broadcast_repository.cancel(callback.from_user.id, draft_id)

@@ -195,7 +195,9 @@ class Broadcast(Base):
 
     __tablename__ = "broadcasts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), index=True
+    )
     owner_id: Mapped[int] = mapped_column(ForeignKey("telegram_users.id"), index=True)
     status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
     revision: Mapped[int] = mapped_column(Integer, default=1)

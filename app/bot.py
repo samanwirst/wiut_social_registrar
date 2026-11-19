@@ -54,7 +54,7 @@ class BotApp:
         self._previous_exception_handler = None
         self._exception_handler = None
         self.event_repository = EventRepository(self.database)
-        self.broadcast_repository = BroadcastRepository(self.database)
+        self.broadcast_repository = BroadcastRepository(self.database, admin_ids=settings.admin_ids)
         self.broadcast_worker = BroadcastWorker(
             self.broadcast_repository, self.bot, health=self.health
         )
