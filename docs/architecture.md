@@ -115,6 +115,34 @@ After polling stops, the update-drain middleware waits for active chat handlers,
 updates queued on a student's isolation lock, before database and network clients close.
 Already committed registration stages and questionnaire tokens remain in the database.
 
+## Anonymous forms
+
+Migration `0009_anonymous_forms` adds off-by-default anonymity and an irreversible first-
+registration lock to events, plus an optional random UUID on anonymous attendance rows.
+Existing events remain identified and existing registrations backfill the lock. Changing
+anonymity before the first submission advances the form revision so old drafts must restart.
+Setting changes and enrollment share the event lock; a racing submission cannot bypass it.
+Internal Telegram/profile keys and existing uniqueness constraints still enforce one response.
+
+Organizer projections lock the event while choosing their identity mode and reading rows;
+SQLite uses `BEGIN IMMEDIATE` for these reads to prevent a mode-change/first-response race.
+Anonymous projections do not join profile tables. They expose only a random response UUID,
+answers, custom values and editing state. They omit registration IDs, profile/contact fields,
+and timestamp values. Selection and edits validate UUIDs against the owned anonymous form;
+numeric Telegram IDs cannot select an anonymous row. Final answers and attendance still commit
+atomically. Owner-scoped media links encode only random response/question UUIDs, return no
+student identifier and reject the legacy registration-ID link shape for anonymous forms.
+
+Anonymous exports contain response numbers, answers and custom columns. Their distinct format
+excludes all identified-contact/system columns, including hidden IDs. Broadcast creation and
+reads reject anonymous events independently of the UI. The service retains internal identity
+for deduplication; this is anonymity to organizers, not unlinkability against database operators.
+Answer/file contents may themselves contain details provided by the participant.
+
+Anonymity cannot be changed after the first enrollment, even after answers expire. Do not run
+older, anonymity-unaware application images against a database containing anonymous forms.
+The migration blocks schema downgrades while any anonymous form exists.
+
 Profile completion returns pending enrollment outcomes from its own transaction. Closed forms
 are reported separately rather than being included in a successful participation message.
 

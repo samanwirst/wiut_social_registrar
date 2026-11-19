@@ -33,7 +33,7 @@ export function EventEditor({ event, guard, detailBack, notify, onSaved }: {
     }}>{tabs.map(value =>
       <TabsList.Item key={value} id={`event-tab-${value}`} type="button" selected={tab === value} aria-selected={tab === value}
         aria-controls="event-content" tabIndex={tab === value ? 0 : -1} disabled={saving} onClick={() => setTab(value)}>
-        {value === 'qr' ? 'QR' : value === 'participants' ? 'People' : value[0].toUpperCase() + value.slice(1)}</TabsList.Item>)}</TabsList>
+        {value === 'qr' ? 'QR' : value === 'participants' ? event.anonymous ? 'Responses' : 'People' : value[0].toUpperCase() + value.slice(1)}</TabsList.Item>)}</TabsList>
     <div id="event-content" role="tabpanel" aria-labelledby={`event-tab-${tab}`}>
     {tab === 'participants' ? <Participants eventId={event.id} detailBack={detailBack} onDirtyChange={setAnswerDirty} />
       : tab === 'qr' ? <EventShare event={event} designer={qrDesigner} notify={notify} />
@@ -47,9 +47,14 @@ export function EventEditor({ event, guard, detailBack, notify, onSaved }: {
               <Field label="Description"><Textarea aria-label="Description" value={draft.description} maxLength={4000} rows={4} disabled={saving}
                 placeholder="What should your participants know?" onChange={e => change({ description: e.target.value })} /></Field>
             </div>
-            <Cell Component="label" multiline subtitle="Turn this off to close the form to new responses"
+            <Cell Component="div" className="settings-toggle" multiline subtitle="Turn this off to close the form to new responses"
+              onClick={e => { if (!saving && !(e.target as Element).closest('label')) change({ registration_open: !draft.registration_open }); }}
               after={<Switch aria-label="Accept registrations" checked={draft.registration_open} disabled={saving}
                 onChange={e => change({ registration_open: e.target.checked })} />}>Accept registrations</Cell>
+            <Cell Component="div" className="settings-toggle" multiline subtitle="Can only be changed before the first registration"
+              onClick={e => { if (!saving && !event.anonymous_locked && !(e.target as Element).closest('label')) change({ anonymous: !draft.anonymous }); }}
+              after={<Switch aria-label="Anonymous" checked={draft.anonymous} disabled={saving || event.anonymous_locked}
+                onChange={e => change({ anonymous: e.target.checked })} />}>Anonymous</Cell>
           </Section>
         </List> : <Questions questions={draft.questions} locked={event.form_locked} disabled={saving} onChange={questions => change({ questions })} />}
         <div className="savebar">

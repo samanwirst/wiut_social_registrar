@@ -15,6 +15,8 @@ def event_json(event):
         "title": event.title,
         "description": event.description,
         "registration_open": event.registration_open,
+        "anonymous": event.anonymous,
+        "anonymous_locked": event.anonymous_locked,
         "questions": event.questions,
         "response_retention_days": event.response_retention_days,
         "revision": event.revision,
@@ -92,6 +94,7 @@ async def event_members(request):
             "questions": page.event.questions,
             "columns": page.event.table_columns,
             "columns_revision": page.event.columns_revision,
+            "anonymous": page.event.anonymous,
         }
     )
 

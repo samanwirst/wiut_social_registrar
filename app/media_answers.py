@@ -1,5 +1,6 @@
 """Bounded Telegram attachment references; file bytes and bot credentials stay out of answers."""
 
+import base64
 import re
 from uuid import UUID
 
@@ -83,13 +84,24 @@ def validate_attachment(question, value):
 
 def public_attachment(value, registration_id, question_id):
     """Expose presentation metadata and an owner-checked bot link payload, never a file ID."""
-    payload = f"file_{registration_id}_{question_id.replace('-', '')}"
+    payload = (
+        "file_a"
+        + base64.urlsafe_b64encode(UUID(registration_id).bytes + UUID(question_id).bytes)
+        .rstrip(b"=")
+        .decode()
+        if isinstance(registration_id, str)
+        else f"file_{registration_id}_{question_id.replace('-', '')}"
+    )
     return {
         key: item for key, item in value.items() if key not in {"file_id", "file_unique_id"}
     } | {"payload": payload}
 
 
 def attachment_reference(payload):
+    match = re.fullmatch(r"file_a([A-Za-z0-9_-]{43})", payload)
+    if match:
+        raw = base64.urlsafe_b64decode(match[1] + "=")
+        return str(UUID(bytes=raw[:16])), str(UUID(bytes=raw[16:]))
     match = re.fullmatch(r"file_([1-9][0-9]{0,18})_([a-f0-9]{32})", payload)
     if match and int(match[1]) < 2**63:
         return int(match[1]), str(UUID(match[2]))

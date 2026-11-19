@@ -195,7 +195,7 @@ The Mini App becomes available only after a student **successfully creates their
 
 The organizer workspace provides:
 
-- Form name, department, description, and an open/closed registration switch.
+- Form name, department, description, **Accept registrations**, and **Anonymous** switches. Anonymous defaults to off and can only change before the first registration; this is enforced on the server as well.
 - A dedicated **QR** tab with a copyable registration link and **Send QR to chat**. The bot sends the original **PNG** document, preserving quality and transparency. Choose a transparent or opaque background, or describe a custom AI design. QR images load only when this tab is opened; the other pages focus on editing and participants.
 - Up to **20 questions**, with text, multiple choice, photo, file, voice message, video, audio, GIF, video message or any-attachment answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each choice question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
 - A People table with **10 rows per page**, contact details, Level, editable response cells, organizer columns, and multi-page audience selection. **Refresh** fetches current answers. Answers expire automatically according to the form's retention period.
@@ -220,6 +220,16 @@ and unconfirmed message composition, then removes the contact keyboard. It prese
 completed profiles, completed submissions, rate limits and already confirmed deliveries.
 Old verification codes, question buttons and cancelled message previews cannot resume the
 cancelled flow. Use `/start` or scan the form's QR to begin again.
+
+**Anonymous forms** show organizers only responses and their own custom columns. Student ID,
+Telegram ID, name, username, email, phone, education level and precise response timestamps
+are excluded from the API and workbook, including hidden columns. The bot retains the
+internal account association to prevent repeat submissions; organizers receive random,
+form-local response keys for selection and editing. Anonymous workbooks use the separate
+`wiut-social-registrar.anonymous-responses` format and cannot be imported as identified
+participant lists. Messaging is unavailable for anonymous forms. Media opens without a
+student identifier or forwarding attribution. Anonymity hides the saved profile; participants'
+answer text and uploaded file contents are shared as submitted.
 
 Closing a form rejects new scans and unfinished form submissions with **Registration closed**.
 If the organizer closes it while a student is verifying their profile, the profile can still

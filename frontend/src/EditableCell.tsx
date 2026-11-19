@@ -4,6 +4,7 @@ import { CheckIcon, CloseIcon, ExpandIcon } from './Icons';
 import { CELL_TEXT_LIMIT, useCellEditor } from './hooks/useCellEditor';
 import type { CellEditorProps } from './hooks/useCellEditor';
 import { useTextOverflow } from './hooks/useTextOverflow';
+import { memberLabel } from './types';
 
 export function EditableCell({ onExpand, ...props }: CellEditorProps & { onExpand: (initialDraft?: string) => void }) {
   const { member, definition } = props;
@@ -12,7 +13,7 @@ export function EditableCell({ onExpand, ...props }: CellEditorProps & { onExpan
   const display = Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? value ? 'Yes' : 'No' : value || '—';
   const { ref, overflowing } = useTextOverflow(display);
   const longText = definition.type === 'text' && overflowing;
-  const label = `${definition.label} for ${member.name || member.student_id}`;
+  const label = `${definition.label} for ${memberLabel(member)}`;
   return <td className={`editable-cell${editing ? ' cell-editing' : ''}`}>
     {editing ? <form className="cell-editor" aria-label={`Edit ${label}`} onSubmit={async e => { e.preventDefault(); if (await save()) setEditing(false); }} onKeyDown={e => {
       if (e.key === 'Escape' && !saving) setEditing(false);

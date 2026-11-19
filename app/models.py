@@ -132,6 +132,8 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     registration_open: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    anonymous: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    anonymous_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     questions: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     response_retention_days: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
@@ -163,9 +165,11 @@ class EventRegistration(Base):
     __table_args__ = (
         UniqueConstraint("event_id", "outlook_profile_id", name="uq_event_student"),
         UniqueConstraint("event_id", "telegram_user_id", name="uq_event_telegram_user"),
+        Index("ux_event_registration_anonymous_id", "anonymous_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    anonymous_id: Mapped[str | None] = mapped_column(String(36))
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id"))
     telegram_user_id: Mapped[int] = mapped_column(ForeignKey("telegram_users.id"), index=True)
     outlook_profile_id: Mapped[int] = mapped_column(ForeignKey("outlook_profiles.id"), index=True)

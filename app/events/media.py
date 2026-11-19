@@ -11,12 +11,15 @@ from app.models import EventAnswers, EventRegistration, OutlookProfile
 async def submitted_attachment(database, owner, payload, now):
     identity, question_id = attachment_reference(payload)
     async with database.transaction() as session:
-        registration = await session.scalar(
-            select(EventRegistration).where(EventRegistration.id == identity)
+        column = (
+            EventRegistration.anonymous_id if isinstance(identity, str) else EventRegistration.id
         )
+        registration = await session.scalar(select(EventRegistration).where(column == identity))
         if registration is None:
             raise EventError("This attachment is no longer available")
         event = await owned_event(session, owner, registration.event_id)
+        if event.anonymous != isinstance(identity, str):
+            raise EventError("This attachment is no longer available")
         question = next((q for q in event.questions if q["id"] == question_id), None)
         response = await session.scalar(
             select(EventAnswers).where(
@@ -31,7 +34,11 @@ async def submitted_attachment(database, owner, payload, now):
             or question_id not in response.answers
         ):
             raise EventError("This attachment is no longer available")
-        profile = await session.get(OutlookProfile, registration.outlook_profile_id)
+        profile = (
+            None
+            if event.anonymous
+            else await session.get(OutlookProfile, registration.outlook_profile_id)
+        )
         return (
             event.title,
             question["label"],

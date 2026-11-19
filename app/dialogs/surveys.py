@@ -45,6 +45,15 @@ async def send_question(message, step):
         "\n\n",
         instruction,
     )
+    if step.index == 0:
+        text += Text(
+            "\n\n",
+            Italic(
+                "Anonymous response · Your student profile is hidden\nAnswers and files are shared as you submit them"
+                if step.event.anonymous
+                else "Your student profile will be shared with the organizer"
+            ),
+        )
     await message.answer(**text.as_kwargs(), reply_markup=question_keyboard(step))
 
 

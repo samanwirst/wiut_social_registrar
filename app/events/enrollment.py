@@ -1,6 +1,7 @@
 from datetime import timedelta
+from uuid import uuid4
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 
 from app.clock import utc_now
 from app.event_errors import EventError
@@ -18,9 +19,8 @@ from app.registration_state import registration_complete
 
 
 async def enroll(session, insert, user, event_id, now) -> int | None:
-    retention = await session.scalar(
-        select(Event.response_retention_days).where(Event.id == event_id)
-    )
+    event = await session.get(Event, event_id)
+    retention = event.response_retention_days
     result = await session.execute(
         insert(EventRegistration)
         .values(
@@ -28,12 +28,18 @@ async def enroll(session, insert, user, event_id, now) -> int | None:
             telegram_user_id=user.id,
             outlook_profile_id=user.outlook_profile_id,
             registered_at=now,
+            anonymous_id=str(uuid4()) if event.anonymous else None,
             table_expires_at=now + timedelta(days=retention),
         )
         .on_conflict_do_nothing()
         .returning(EventRegistration.id)
     )
-    return result.scalar_one_or_none()
+    registration_id = result.scalar_one_or_none()
+    if registration_id is not None:
+        await session.execute(
+            update(Event).where(Event.id == event_id).values(anonymous_locked=True)
+        )
+    return registration_id
 
 
 async def existing_registration(session, user, event_id):

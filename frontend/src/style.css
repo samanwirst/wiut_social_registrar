@@ -79,6 +79,8 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
 .event-studio[data-platform=ios] .tabs [role=tab] { border-radius: calc(var(--studio-radius-control) - var(--studio-space-1)); }
 .event-studio[data-platform=ios] .tabs [aria-selected=true] { background: var(--studio-segment-active); color: var(--tgui--text_color); box-shadow: 0 1px 3px #00000014; }
 .event-form { min-width: 0; margin: 0; padding-bottom: calc(var(--studio-savebar-height) + var(--studio-space-6)); }
+.event-studio .settings-toggle { padding-inline: var(--studio-inset); }
+.settings-toggle label { scroll-margin-block: 120px; }
 .participants { min-width: 0; }
 .editor-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .field-stack { display: grid; gap: var(--studio-space-5); padding: var(--studio-inset); }

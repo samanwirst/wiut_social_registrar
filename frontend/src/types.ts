@@ -15,6 +15,8 @@ export interface Event {
   title: string;
   description: string;
   registration_open: boolean;
+  anonymous: boolean;
+  anonymous_locked: boolean;
   questions: Question[];
   response_retention_days: number;
   revision: number;
@@ -43,19 +45,29 @@ export interface Broadcast { id: string; event_id: string; status: string; revis
 export interface BroadcastsPage extends Pagination { broadcasts: Broadcast[]; has_active: boolean }
 
 export interface Member {
-  telegram_id: number;
-  student_id: string;
-  name: string;
-  telegram_username: string | null;
-  email: string;
-  phone_number: string | null;
-  education_level: string | null;
+  response_id?: string;
+  telegram_id?: number;
+  student_id?: string;
+  name?: string;
+  telegram_username?: string | null;
+  email?: string;
+  phone_number?: string | null;
+  education_level?: string | null;
   answers: Record<string, string | string[] | MediaAnswer> | null;
-  answers_expires_at: string | null;
+  answers_expires_at?: string | null;
   organizer_values: Record<string, CellValue>;
   row_revision: number;
-  editable_until: string;
+  editable_until?: string;
+  can_edit?: boolean;
 }
 
-export interface MembersPage extends Pagination { members: Member[]; member_ids: number[]; questions: Question[]; columns: TableColumn[]; columns_revision: number }
+export type MemberId = number | string;
+export function memberId(member: Member): MemberId {
+  if (member.response_id !== undefined) return member.response_id;
+  if (member.telegram_id !== undefined) return member.telegram_id;
+  throw new Error('Invalid response');
+}
+export const memberLabel = (member: Member) => member.name || member.student_id || 'Anonymous response';
+
+export interface MembersPage extends Pagination { anonymous: boolean; members: Member[]; member_ids: MemberId[]; questions: Question[]; columns: TableColumn[]; columns_revision: number }
 export type Notify = (message: string, error?: boolean) => void;

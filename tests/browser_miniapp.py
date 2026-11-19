@@ -1315,6 +1315,104 @@ async def main():
                 await page.set_viewport_size({"width": 390, "height": 844})
                 await attachment_button.scroll_into_view_if_needed()
                 await page.screenshot(path=str(OUT / "media-answer-mobile.png"), full_page=True)
+                anonymous_form = await events.create(100, "Anonymous Feedback QA")
+                await page.goto(f"http://127.0.0.1:{port}/")
+                await page.get_by_role("button", name="Anonymous Feedback QA").click()
+                anonymous_switch = page.get_by_label("Anonymous", exact=True)
+                await expect(anonymous_switch).not_to_be_checked()
+                await expect(anonymous_switch).to_be_enabled()
+                anonymous_row = page.locator(".settings-toggle").filter(
+                    has=page.get_by_text("Anonymous", exact=True)
+                )
+                await anonymous_row.click(position={"x": 24, "y": 20})
+                await expect(anonymous_switch).to_be_checked()
+                switch_label = anonymous_switch.locator("..")
+                await switch_label.evaluate("node => node.scrollIntoView({block: 'center'})")
+                await switch_label.click()
+                await expect(anonymous_switch).not_to_be_checked()
+                await anonymous_row.click(position={"x": 24, "y": 20})
+                await expect(anonymous_switch).to_be_checked()
+                registrations_switch = page.get_by_label("Accept registrations", exact=True)
+                registrations_row = page.locator(".settings-toggle").filter(
+                    has=page.get_by_text("Accept registrations", exact=True)
+                )
+                await registrations_row.click(position={"x": 24, "y": 20})
+                await expect(registrations_switch).not_to_be_checked()
+                await registrations_switch.locator("..").click()
+                await expect(registrations_switch).to_be_checked()
+                await page.get_by_role("tab", name="Questions", exact=True).click()
+                await page.get_by_role("button", name="Add question", exact=True).click()
+                await page.get_by_label("Question", exact=True).fill("Feedback")
+                await page.get_by_role("button", name="Save changes", exact=True).click()
+                await page.get_by_text("All changes saved", exact=True).wait_for()
+                anonymous_form = await events.settings(100, anonymous_form.id)
+                assert anonymous_form.anonymous and not anonymous_form.anonymous_locked
+                for user_id in range(1000, 1012):
+                    await events.submit_form(
+                        user_id,
+                        anonymous_form.id,
+                        {anonymous_form.questions[0]["id"]: f"Feedback {user_id - 1000}"},
+                        anonymous_form.form_revision,
+                    )
+                await page.goto(f"http://127.0.0.1:{port}/")
+                await page.get_by_role("button", name="Anonymous Feedback QA").click()
+                await expect(page.get_by_label("Anonymous", exact=True)).to_be_checked()
+                await expect(page.get_by_label("Anonymous", exact=True)).to_be_disabled()
+                await (
+                    page.locator(".settings-toggle")
+                    .filter(has=page.get_by_text("Anonymous", exact=True))
+                    .click(position={"x": 24, "y": 20})
+                )
+                await expect(page.get_by_label("Anonymous", exact=True)).to_be_checked()
+                await page.get_by_text(
+                    "Can only be changed before the first registration", exact=True
+                ).wait_for()
+                await page.screenshot(
+                    path=str(OUT / "anonymous-settings-mobile.png"), full_page=True
+                )
+                await page.get_by_role("tab", name="Responses", exact=True).click()
+                await page.get_by_role("region", name="Anonymous answers").wait_for()
+                assert await page.locator("thead th").all_text_contents() == ["", "Feedback"]
+                assert (
+                    await page.get_by_role("button", name="Prepare message", exact=True).count()
+                    == 0
+                )
+                assert await page.locator(".broadcast-history").count() == 0
+                assert (
+                    await page.locator(
+                        'a[href^="tg://"], a[href^="mailto:"], a[href^="tel:"]'
+                    ).count()
+                    == 0
+                )
+                await page.get_by_label("Select all responses", exact=True).locator("..").click()
+                await page.get_by_text("12 selected across pages", exact=True).wait_for()
+                await page.get_by_role("button", name="Next", exact=True).click()
+                await expect(page.locator("tbody tr")).to_have_count(2)
+                file_clock[0] += 4
+                await page.get_by_role("button", name="Export .xlsx", exact=True).click()
+                await page.get_by_text("Sent to your chat", exact=True).wait_for()
+                anonymous_book = load_workbook(BytesIO(sent_files[-1].data))
+                assert [cell.value for cell in anonymous_book["Participants"][1]] == [
+                    "Response",
+                    "Feedback",
+                ]
+                assert anonymous_book["Participants"].max_row == 13
+                cells = str(
+                    [[cell.value for row in sheet for cell in row] for sheet in anonymous_book]
+                )
+                assert all(
+                    value not in cells
+                    for value in [
+                        "student_id",
+                        "telegram_id",
+                        "registration_id",
+                        "student1000@example.test",
+                        "Student 1000",
+                    ]
+                )
+                await page.screenshot(
+                    path=str(OUT / "anonymous-responses-mobile.png"), full_page=True
+                )
                 await browser.close()
             assert not browser_errors, browser_errors
             print(

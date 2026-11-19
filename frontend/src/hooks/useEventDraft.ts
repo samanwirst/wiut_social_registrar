@@ -22,9 +22,9 @@ export function useEventDraft(event: EventDetails, guard: MutableRefObject<() =>
     savingRef.current = true;
     setSaving(true);
     try {
-      const { title, description, registration_open, questions, response_retention_days, revision, department } = draft;
+      const { title, description, registration_open, questions, response_retention_days, revision, department, anonymous } = draft;
       const updated = await api<Event>(`/api/forms/${event.id}`, { method: 'PUT', body: JSON.stringify({
-        title, description, registration_open, questions, response_retention_days, revision, department,
+        title, description, registration_open, questions, response_retention_days, revision, department, anonymous,
       }) });
       const next = { ...updated, link: event.link, qr_styling_enabled: event.qr_styling_enabled };
       onSaved(next);
