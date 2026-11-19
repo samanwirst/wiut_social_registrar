@@ -3,6 +3,7 @@ import re
 from sqlalchemy import delete, select
 
 from app.clock import utc_now
+from app.conversations import cancel_current
 from app.db import Database
 from app.education import EDUCATION_LEVELS
 from app.events.enrollment import enroll_pending_events
@@ -183,6 +184,9 @@ class RegistrationRepository:
                 )
             )
             self._event(session, user_id, "registration_cancelled")
+
+    async def cancel_current(self, user_id):
+        await cancel_current(self.db, user_id, self.clock())
 
     async def event(self, user_id, name, student=None, **details):
         async with self.db.transaction(write=True) as session:

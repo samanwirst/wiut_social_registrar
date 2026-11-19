@@ -123,9 +123,9 @@ contact, and education level. Messages use ordinary Telegram entities for headin
 copyable IDs; student names and event text stay literal.
 
 The native **Menu** button adapts to the user. Before registration it offers `/start`,
-`/resend`, `/help` and `/info`. Registered students see `/new_form`, `/me`, `/help` and
+`/resend`, `/cancel`, `/help` and `/info`. Registered students see `/new_form`, `/me`, `/cancel`, `/help` and
 `/info`; `/panel` appears after creating a form only for its organizers when the panel is
-configured. `/me` sits immediately before `/help`, and `/info` is last. Role changes update the menu
+configured. `/me` is followed by `/cancel` and `/help`, with `/info` last. Role changes update the menu
 immediately. Updates are cached with bounded memory, and a failed menu update does not
 block registration. Groups do not inherit the private-chat command list.
 
@@ -206,6 +206,12 @@ The organizer workspace provides:
 Set up questions **before sharing the QR code**. Forms start open and have no questions, preserving immediate enrollment until questions are added. Students who already submitted are not asked to submit again; any extra answer cells show a dash.
 
 Students fill questionnaires **inside the bot chat**, not in the Mini App. The bot sends one question at a time. Text and number questions accept a message; choice questions save the selected inline option and immediately advance, without checkmarks or a **Continue** step. Optional questions have **Skip**. `/start` restores progress. Opening another form QR immediately leaves the unfinished form and starts the selected one; earlier draft answers are discarded and its old inline buttons cannot answer the new questionnaire. Reopening the same form preserves progress. An invalid or closed form link leaves the current questionnaire intact.
+
+`/cancel` discards unfinished verification, pending form invitations, questionnaire answers
+and unconfirmed message composition, then removes the contact keyboard. It preserves
+completed profiles, completed submissions, rate limits and already confirmed deliveries.
+Old verification codes, question buttons and cancelled message previews cannot resume the
+cancelled flow. Use `/start` or scan the form's QR to begin again.
 
 Choice answers retain their existing storage format. Previously saved selections and questionnaire tokens survive upgrades; options and **Continue** buttons from the old multi-select UI remain valid for the current question. Choosing an option preserves earlier selections for that question and advances immediately. No migration or form-revision change is needed.
 

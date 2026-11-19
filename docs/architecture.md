@@ -30,6 +30,7 @@ preserves their public commands, API payloads, configuration, and database schem
 | Shared pagination bounds | `app/pagination.py` |
 | Question definitions, answer validation, and answer transitions | `app/event_forms.py` |
 | Persistent questionnaire progress | `app/surveys.py` |
+| Atomic cancellation of unfinished chat flows | `app/conversations.py` |
 | HTTP application wiring | `app/miniapp/application.py` |
 | Signed Telegram authentication | `app/miniapp/auth.py` |
 | HTTP input/output, headers, and static allowlist | `app/miniapp/routes.py`, `middleware.py`, `assets.py` |
@@ -92,6 +93,11 @@ Shared UTC clocks are injectable. Drafts expire after one hour of inactivity; fi
 default to 30 days. Expired answers are filtered on reads and physically deleted at startup
 and every ten minutes. The cleanup service runs without an HTTP server. It does not delete
 profiles, attendance, or analytics, and answer contents never enter those permanent tables.
+
+`/cancel` takes the user lock and clears unfinished identity fields, challenges, pending
+invitations, form drafts and unconfirmed composition in one transaction. Completed profiles,
+attendance, final answers and email quotas stay intact. Confirmed deliveries are not stopped.
+FSM cleanup and keyboard removal happen after commit; stale buttons cannot recreate the flow.
 
 `BotApp` owns all runtime resources. Shutdown uses `AsyncExitStack` to close every resource
 even when another close fails. HTTP startup cleans up its runner on bind/setup failures or

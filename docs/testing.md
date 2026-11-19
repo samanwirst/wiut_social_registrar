@@ -25,6 +25,9 @@ network failures, bounded recovery history, and prevention of sensitive data in 
 All Bot API, Docker, and systemd transports in those tests are mocked; operational setup alerts
 are an explicit manual action outside pytest. Tests verify private atomic state, recipient
 allowlists, notification deduplication/backoff, bounded repair, and status-aware `/start` resume.
+`/cancel` checks cover code/phone/education/form stages, stale buttons, preserved completed
+data and quotas, and the distinction between unconfirmed composition and confirmed deliveries.
+
 Notification-policy checks cover transient error suppression, confirmed outages, grouped
 availability symptoms, dependency inhibition, stable recovery, per-recipient delivery tracking,
 obsolete queue removal, removed administrators, monitor gaps/incomplete probes, and migration

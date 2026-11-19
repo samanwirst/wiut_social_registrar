@@ -1,5 +1,6 @@
 from app.handlers import (
     broadcast_handler,
+    cancel_handler,
     contact_handler,
     education_handler,
     event_handler,
@@ -18,6 +19,7 @@ def create_routers():
     # Fresh routers allow independent application instances in tests.
     return (
         start_handler.create_router(),
+        cancel_handler.create_router(),
         info_handler.create_router(),
         help_handler.create_router(),
         profile_handler.create_router(),
