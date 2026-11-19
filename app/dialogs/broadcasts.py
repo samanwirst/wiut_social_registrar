@@ -15,19 +15,16 @@ def confirmation(draft, *, can_send=True):
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"Send to {recipient_count(draft['total'])}",
+                    text="Send to everyone"
+                    if draft["event_id"] is None
+                    else f"Send to {recipient_count(draft['total'])}",
                     callback_data="bc:send:" + suffix,
                 )
             ]
         )
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            *rows,
-            [
-                InlineKeyboardButton(text="Edit message", callback_data="bc:edit:" + suffix),
-            ],
-        ]
-    )
+    if draft["event_id"] is not None:
+        rows.append([InlineKeyboardButton(text="Edit message", callback_data="bc:edit:" + suffix)])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
 async def show_preview(message, repository, draft):
@@ -41,7 +38,9 @@ async def show_preview(message, repository, draft):
     except TelegramAPIError:
         available = False
         await message.answer(
-            "The saved preview is unavailable — choose Edit message to prepare it again"
+            "The saved preview is unavailable\nPrepare a new announcement"
+            if draft["event_id"] is None
+            else "The saved preview is unavailable — choose Edit message to prepare it again"
         )
     await message.answer(
         **card(
@@ -55,6 +54,8 @@ async def show_preview(message, repository, draft):
 async def open_composer(message, repository, draft_id, *, edit=False):
     try:
         draft = await repository.get(message.from_user.id, draft_id)
+        if edit and draft["event_id"] is None:
+            raise EventError("Prepare a new announcement to change this preview")
         if draft["status"] == "preview" and not edit:
             await show_preview(message, repository, draft)
         elif draft["status"] in {"draft", "composing", "preview"}:
@@ -73,7 +74,12 @@ async def open_composer(message, repository, draft_id, *, edit=False):
             await message.answer(
                 **card(
                     "Message status",
-                    f"{draft['status'].capitalize()}\nSent: {counts.get('sent', 0)} of {draft['total']}\nFailed: {counts.get('failed', 0)}\nUnconfirmed: {counts.get('unknown', 0)}\n\nFinished messages appear at the bottom of the form's People tab",
+                    f"{draft['status'].capitalize()}\nSent: {counts.get('sent', 0)} of {draft['total']}\nFailed: {counts.get('failed', 0)}\nUnconfirmed: {counts.get('unknown', 0)}"
+                    + (
+                        "\n\nFinished messages appear at the bottom of the form's People tab"
+                        if draft["event_id"] is not None
+                        else ""
+                    ),
                 ).as_kwargs()
             )
     except EventError as error:

@@ -555,7 +555,7 @@ Lookup JSON contains `student_id`, `name`, `email`, `account`, `email_addresses`
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Required for the bot | Token from BotFather. |
-| `BOT_ADMIN_IDS` | `[]` | JSON array of numeric Telegram IDs for operational alerts, e.g. `[123456789]`; no extra access to student data. |
+| `BOT_ADMIN_IDS` | `[]` | JSON array of numeric Telegram IDs for operational alerts and administrator announcements, e.g. `[123456789]`; does not grant access to other organizers' forms. |
 | `REGISTRAR_MONITOR_CA_FILE` | System CA store | Optional public CA bundle for the supervisor's local HTTPS checks; TLS validation remains enabled. |
 | `APP_ENV` | `local` | `local` selects SQLite by default; `production` requires PostgreSQL. |
 | `DATABASE_URL` | Automatic | Optional explicit SQLAlchemy async database URL. |
