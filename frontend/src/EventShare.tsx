@@ -45,7 +45,7 @@ export function EventShare({ event, designer, notify }: {
         <Field label="Describe your design"><Textarea aria-label="Design prompt" rows={3} maxLength={1200} value={prompt}
           disabled={!event.qr_styling_enabled} placeholder="Describe the theme, colors, and style you have in mind"
           onChange={e => setPrompt(e.target.value)} /></Field>
-        <Button type="submit" stretched
+        <Button data-analytics="generate_design" type="submit" stretched
           disabled={!event.qr_styling_enabled || !prompt.trim() || designer.busy || designer.restoring || designer.resetting || designer.cooldown > 0}>
           {designer.busy ? 'Creating design' : designer.cooldown > 0 ? `Generate again in ${designer.cooldown}s` : 'Generate design'}</Button>
         {!event.qr_styling_enabled ? <Caption className="muted">AI designs are not enabled yet. You can send a standard QR to your chat</Caption> : null}
@@ -79,9 +79,9 @@ export function EventShare({ event, designer, notify }: {
           <Caption className="muted">PNG · {transparent ? 'Transparent' : 'Opaque'} background{designId ? ' · Scan checked' : ''}</Caption>
           <Cell className="qr-background" Component="label" multiline
             subtitle={transparent ? 'For light backgrounds and print layouts' : 'Include artwork around your QR code'}
-            after={<Switch aria-label="Transparent background" checked={transparent}
+            after={<Switch data-analytics="transparent_background" aria-label="Transparent background" checked={transparent}
               onChange={e => setTransparent(e.target.checked)} />}>Transparent background</Cell>
-          <Button type="button" stretched loading={file.busy} disabled={!qr || file.busy}
+          <Button data-analytics="download_qr" type="button" stretched loading={file.busy} disabled={!qr || file.busy}
             onClick={() => { void file.send({ kind: 'qr', transparent, design_id: designId }); }}>Send QR to chat</Button>
           {file.notice ? <Caption role="status">{file.notice}</Caption> : null}
           {file.error ? <Caption role="alert" className="danger">{file.error}</Caption> : null}
@@ -90,10 +90,10 @@ export function EventShare({ event, designer, notify }: {
           <Caption>{failed}</Caption>{designId ? <Caption className="muted">Your previous design is still available above</Caption> : null}</div> : null}
         {designer.syncError ? <Button type="button" stretched mode="bezeled" onClick={designer.retry}>Reconnect</Button> : null}
         {designer.design && !designer.restoring && !designer.resetting && (!designer.busy || designer.syncError)
-          ? <Button type="button" mode="plain" onClick={() => { void designer.reset(); }}>Use standard QR</Button> : null}
+          ? <Button data-analytics="standard_qr" type="button" mode="plain" onClick={() => { void designer.reset(); }}>Use standard QR</Button> : null}
       </div>
       <a href={event.link} className="event-link" target="_blank" rel="noopener noreferrer">{event.link}</a>
-      <Button type="button" stretched mode="bezeled" onClick={copy}>Copy form link</Button>
+      <Button data-analytics="copy_link" type="button" stretched mode="bezeled" onClick={copy}>Copy form link</Button>
     </div>
   </Section>;
 }

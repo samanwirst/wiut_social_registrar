@@ -1,5 +1,12 @@
 # Verification
 
+Analytics regressions use synthetic Telegram delivery and isolated SQLite/PostgreSQL. They
+cover password/code/browser binding, one-use and concurrent consumption, expiry, persistent
+throttling, failed code delivery, session rotation/revocation, Secure cookies, CSRF/Origin,
+separation from organizer authentication, typed/deduplicated/bounded ingestion, collection
+failure isolation, cohort aggregates, per-question progress, anonymous identity omission,
+atomic rollback and retention. See [analytics.md](analytics.md) for metric definitions.
+
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for installing Python development dependencies
 and frontend packages. Real `.env` files, Telegram accounts, and Microsoft access are not needed.
 
@@ -77,6 +84,10 @@ A system Chromium installation can be used instead; set `CHROMIUM_EXECUTABLE` ex
 when needed. Browser checks start a separate aiohttp application on an ephemeral port,
 use signed synthetic Telegram initialization data, and exercise the real API and temporary DB.
 The SDK host is simulated; Graph and Telegram never receive messages.
+
+`make browser` also runs `browser_analytics.py` against an isolated HTTPS server. It checks
+password/Telegram-code login, administrator reports, filters, pagination, session restoration,
+logout, signed Mini App telemetry and phone/desktop layouts with synthetic data.
 
 Checks cover event editing and save recovery, locked questions, poll option controls,
 ten-row pagination, contact fields, lazy PNG QR exports with both backgrounds, asynchronous

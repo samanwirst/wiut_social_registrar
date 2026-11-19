@@ -23,15 +23,15 @@ export function TableColumns({ formId, columns, revision, onChanged }: {
     finally { pending.current = false; setSaving(false); }
   };
   return <div className="table-columns">
-    <Button type="button" size="s" mode="plain" aria-expanded={open} onClick={() => setOpen(value => !value)}>Columns</Button>
+    <Button data-analytics="open_columns" type="button" size="s" mode="plain" aria-expanded={open} onClick={() => setOpen(value => !value)}>Columns</Button>
     {open ? <Section header="Organizer columns">
       <div className="field-stack">
         {columns.map(column => <div className="column-row" key={column.id}><span>{column.label}</span>
           <Button type="button" size="s" mode="plain" disabled={saving} onClick={() => { setEditing(structuredClone(column)); setError(''); }}>Edit</Button>
-          <Button type="button" size="s" mode="plain" disabled={saving} onClick={() => {
+          <Button data-analytics="remove_column" type="button" size="s" mode="plain" disabled={saving} onClick={() => {
             if (window.confirm(`Remove ${column.label} and its saved values?`)) void commit(columns.filter(item => item.id !== column.id));
           }}>Remove</Button></div>)}
-        {!editing ? <Button type="button" mode="bezeled" disabled={saving || columns.length >= 20} onClick={() => { setEditing({ id: crypto.randomUUID(), label: '', type: 'text', options: [] }); setError(''); }}>Add column</Button> : null}
+        {!editing ? <Button data-analytics="add_column" type="button" mode="bezeled" disabled={saving || columns.length >= 20} onClick={() => { setEditing({ id: crypto.randomUUID(), label: '', type: 'text', options: [] }); setError(''); }}>Add column</Button> : null}
         {editing ? <form aria-label="Column settings" className="field-stack" onSubmit={e => {
           e.preventDefault(); void commit(columns.some(c => c.id === editing.id) ? columns.map(c => c.id === editing.id ? editing : c) : [...columns, editing]);
         }}>
@@ -40,7 +40,7 @@ export function TableColumns({ formId, columns, revision, onChanged }: {
             const type = e.target.value as TableColumn['type']; setEditing({ ...editing, type, options: type === 'choice' ? ['', ''] : [] });
           }}>{[['text', 'Text'], ['number', 'Number'], ['choice', 'Choice'], ['checkbox', 'Checkbox'], ['date', 'Date']].map(([value, title]) => <option value={value} key={value}>{title}</option>)}</Select></Field>
           {editing.type === 'choice' ? <PollOptions options={editing.options} disabled={saving} locked={false} onChange={options => setEditing({ ...editing, options })} /> : null}
-          <div className="actions"><Button type="submit" size="s" loading={saving} disabled={saving}>Save column</Button>
+          <div className="actions"><Button data-analytics="save_columns" type="submit" size="s" loading={saving} disabled={saving}>Save column</Button>
             <Button type="button" size="s" mode="plain" disabled={saving} onClick={() => setEditing(null)}>Discard</Button></div>
         </form> : null}
         {error ? <Caption className="danger" role="alert">{error}</Caption> : null}

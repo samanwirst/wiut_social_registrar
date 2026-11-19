@@ -34,11 +34,23 @@ def mini_app_ssl_context(settings):
 
 
 class MiniAppServer:
-    def __init__(self, repository, bot, settings, *, static_dir=STATIC, runtime_health=None):
+    def __init__(
+        self,
+        repository,
+        bot,
+        settings,
+        *,
+        static_dir=STATIC,
+        runtime_health=None,
+        usage_collector=None,
+        admin_portal=None,
+    ):
         self.repository, self.bot, self.settings = repository, bot, settings
         self.static_dir = static_dir
         self.runner = None
         self.runtime_health = runtime_health
+        self.usage_collector = usage_collector
+        self.admin_portal = admin_portal
 
     async def start(self):
         if not self.settings.mini_app_url:
@@ -59,6 +71,8 @@ class MiniAppServer:
                 static_dir=self.static_dir,
                 qr_designer=QrDesigner(self.settings.qr_images, health=self.runtime_health),
                 runtime_health=self.runtime_health,
+                usage_collector=self.usage_collector,
+                admin_portal=self.admin_portal,
             ),
             access_log=None,
         )

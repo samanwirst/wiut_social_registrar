@@ -43,6 +43,10 @@ preserves their public commands, API payloads, configuration, and database schem
 | Image generation jobs, provider access, and bounded temporary designs | `app/services/qr_designer.py` |
 | QR artwork composition and scan verification | `app/services/qr_art.py` |
 | Database sessions, dialect inserts, and migrations | `app/db.py` |
+| Typed usage vocabulary, bounded telemetry and aggregate reports | `app/analytics/events.py`, `collector.py`, `queries.py` |
+| Password/Telegram administrator authentication and setup | `app/analytics/auth.py`, `setup.py` |
+| Administrator and telemetry HTTP transport | `app/miniapp/analytics_routes.py` |
+| Separate administrator website and first-party UI observations | `frontend/src/admin/`, `frontend/src/analytics.ts` |
 | Telegram, database, and Mini App configuration | `config.py`, `app/configuration/` |
 
 The repository facades retain their existing public methods so callers need not learn

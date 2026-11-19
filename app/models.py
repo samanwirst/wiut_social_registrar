@@ -260,3 +260,5 @@ class EventFormSession(Base):
     token: Mapped[str] = mapped_column(String(16))
     answers: Mapped[dict] = mapped_column(JSON)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    analytics_id: Mapped[str | None] = mapped_column(String(36))
+    question_started_at: Mapped[datetime | None] = mapped_column(UTCDateTime)

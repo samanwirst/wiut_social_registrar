@@ -10,6 +10,10 @@ from aiogram.client.telegram import PRODUCTION, TEST
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 
+from app.analytics.auth import AdminAuth
+from app.analytics.collector import UsageCollector
+from app.analytics.instrumentation import ChatAnalytics, TelegramAnalytics
+from app.analytics.queries import AnalyticsQueries
 from app.broadcasts import BroadcastRepository
 from app.commands import CommandMenu
 from app.configuration.database import local_database_url
@@ -19,6 +23,7 @@ from app.event_repository import EventRepository
 from app.handlers import create_routers
 from app.middleware import CommandMenuMiddleware, PrivateChatMiddleware, UserContextMiddleware
 from app.miniapp import MiniAppServer
+from app.miniapp.analytics_routes import AdminPortal
 from app.repositories import RegistrationRepository
 from app.services.answer_cleanup import AnswerCleanup
 from app.services.broadcast_worker import BroadcastWorker
@@ -45,6 +50,24 @@ class BotApp:
             settings.graph.env_file, telegram_test=settings.telegram_test_environment
         )
         self.database = Database(url)
+        self.usage = UsageCollector(self.database, retention_days=settings.analytics.retention_days)
+        self.bot.session.middleware.register(TelegramAnalytics(self.usage))
+        self.admin_portal = (
+            AdminPortal(
+                AdminAuth(
+                    self.database,
+                    self.bot,
+                    admin_ids=settings.admin_ids,
+                    password_hash=settings.analytics.password_hash,
+                    secret=settings.verification_secret,
+                ),
+                AnalyticsQueries(self.database, settings.verification_secret),
+                settings.mini_app_url.rstrip("/"),
+                self.usage,
+            )
+            if settings.analytics.password_hash and settings.admin_ids
+            else None
+        )
         self.health = RuntimeHealth(
             self.database,
             self.registrar_service,
@@ -60,7 +83,12 @@ class BotApp:
         )
         self.event_survey = EventSurvey(self.event_repository)
         self.miniapp_server = MiniAppServer(
-            self.event_repository, self.bot, settings, runtime_health=self.health
+            self.event_repository,
+            self.bot,
+            settings,
+            runtime_health=self.health,
+            usage_collector=self.usage,
+            admin_portal=self.admin_portal,
         )
         self.answer_cleanup = AnswerCleanup(self.event_repository, health=self.health)
         self.registration_repository = RegistrationRepository(
@@ -87,6 +115,7 @@ class BotApp:
         for observer in (self.dp.message, self.dp.callback_query):
             observer.middleware(PrivateChatMiddleware())
             observer.middleware(UserContextMiddleware())
+            observer.outer_middleware(ChatAnalytics(self.usage))
             observer.middleware(CommandMenuMiddleware())
         self.dp.errors.register(handle_error)
 
@@ -115,6 +144,7 @@ class BotApp:
         self._exception_handler = report_exception
         loop.set_exception_handler(report_exception)
         await self.health.start()
+        await self.usage.start()
         try:
             await self.command_menu.install_defaults(self.bot)
         except TelegramAPIError as error:
@@ -141,6 +171,7 @@ class BotApp:
             resources.push_async_callback(self.bot.session.close)
             resources.push_async_callback(self.dp.storage.close)
             resources.push_async_callback(self.database.close)
+            resources.push_async_callback(self.usage.close)
             resources.push_async_callback(self.registrar_service.close)
             resources.push_async_callback(self.answer_cleanup.close)
             resources.push_async_callback(self.miniapp_server.close)

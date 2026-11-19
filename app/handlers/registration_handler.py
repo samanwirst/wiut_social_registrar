@@ -1,6 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import Message
 
+from app.analytics.instrumentation import track
 from app.chat_formatting import card, error_text
 from app.dialogs.registration import (
     phone_prompt,
@@ -28,6 +29,7 @@ async def registration_text(
         try:
             await registration_repository.consume_code(message.from_user.id, message.text.strip())
         except RegistrationError as error:
+            track("registration_rejected", stage="email", outcome="rejected", error="validation")
             await message.answer(error_text(error))
             return
         await phone_prompt(message)

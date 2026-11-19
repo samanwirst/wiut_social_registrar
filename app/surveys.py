@@ -1,9 +1,12 @@
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
+from uuid import uuid4
 
 from sqlalchemy import delete, select
 
+from app.analytics.events import record
+from app.analytics.instrumentation import track
 from app.event_errors import EventError
 from app.event_forms import apply_question_response
 from app.events.enrollment import discard_other_pending_events, existing_registration
@@ -51,7 +54,9 @@ class EventSurvey:
             )
             if event is None or not event.registration_open:
                 raise EventError("This event is not accepting registrations.")
-            await discard_other_pending_events(session, user_id, event_id)
+            await discard_other_pending_events(
+                session, user_id, event_id, now=self.repository.clock()
+            )
             if (
                 not event.questions
                 or await existing_registration(session, user, event_id) is not None
@@ -72,6 +77,7 @@ class EventSurvey:
             if draft is None:
                 draft = EventFormSession(telegram_user_id=user_id, event_id=event_id, answers={})
                 session.add(draft)
+            started = False
             if (
                 draft.expires_at is None
                 or draft.expires_at <= now
@@ -84,6 +90,45 @@ class EventSurvey:
                     0,
                 )
                 draft.answers, draft.token = {}, secrets.token_hex(8)
+                started = True
+                draft.analytics_id = str(uuid4())
+                draft.question_started_at = now
+                record(
+                    session,
+                    "form_started",
+                    at=now,
+                    user_id=user_id,
+                    form_id=event_id,
+                    session_id=draft.analytics_id,
+                    anonymous=event.anonymous,
+                    total=len(event.questions),
+                )
+            if draft.analytics_id is None:
+                draft.analytics_id = str(uuid4())
+                draft.question_started_at = now
+            elif not started:
+                record(
+                    session,
+                    "form_resumed",
+                    at=now,
+                    user_id=user_id,
+                    form_id=event_id,
+                    session_id=draft.analytics_id,
+                    anonymous=event.anonymous,
+                    index=draft.question_index,
+                )
+            record(
+                session,
+                "question_reached",
+                at=now,
+                user_id=user_id,
+                form_id=event_id,
+                session_id=draft.analytics_id,
+                anonymous=event.anonymous,
+                question_id=event.questions[draft.question_index]["id"],
+                kind=event.questions[draft.question_index]["type"],
+                index=draft.question_index,
+            )
             draft.expires_at = now + FORM_SESSION_TTL
             return self._step(event, draft)
 
@@ -129,17 +174,47 @@ class EventSurvey:
                     "This button belongs to an earlier question. Use the latest message or send /start."
                 )
             question = event.questions[draft.question_index]
-            answers, advance = apply_question_response(
-                question,
-                draft.answers,
-                text=text,
-                action=action,
-                option=option,
-                attachment=attachment,
-            )
+            try:
+                answers, advance = apply_question_response(
+                    question,
+                    draft.answers,
+                    text=text,
+                    action=action,
+                    option=option,
+                    attachment=attachment,
+                )
+            except EventError:
+                track(
+                    "question_rejected",
+                    form_id=event.id,
+                    session_id=draft.analytics_id,
+                    anonymous=event.anonymous,
+                    question_id=question["id"],
+                    kind=question["type"],
+                    index=draft.question_index,
+                    outcome="rejected",
+                    error="validation",
+                )
+                raise
             if not advance:
                 draft.answers, draft.expires_at = answers, now + FORM_SESSION_TTL
                 return self._step(event, draft), None
+            record(
+                session,
+                "question_answered",
+                at=now,
+                user_id=user_id,
+                form_id=event.id,
+                session_id=draft.analytics_id,
+                anonymous=event.anonymous,
+                question_id=question["id"],
+                kind=question["type"],
+                index=draft.question_index,
+                skipped=action == "skip",
+                duration_ms=(now - draft.question_started_at).total_seconds() * 1000
+                if draft.question_started_at
+                else None,
+            )
             draft.answers = answers
             draft.question_index += 1
             if draft.question_index == len(event.questions):
@@ -149,6 +224,19 @@ class EventSurvey:
                 await session.delete(draft)
                 return None, event
             draft.token, draft.expires_at = secrets.token_hex(8), now + FORM_SESSION_TTL
+            draft.question_started_at = now
+            record(
+                session,
+                "question_reached",
+                at=now,
+                user_id=user_id,
+                form_id=event.id,
+                session_id=draft.analytics_id,
+                anonymous=event.anonymous,
+                question_id=event.questions[draft.question_index]["id"],
+                kind=event.questions[draft.question_index]["type"],
+                index=draft.question_index,
+            )
             return self._step(event, draft), None
 
     async def cancel(self, user_id):

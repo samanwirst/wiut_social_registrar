@@ -3,6 +3,7 @@ from urllib.parse import parse_qsl
 from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiohttp import web
 
+from app.analytics.instrumentation import COLLECTOR, CONTEXT
 from app.clock import utc_now
 from app.event_errors import EventError
 
@@ -39,4 +40,10 @@ async def telegram_auth(request, handler):
             await request.app[REPOSITORY].require_organizer(request[USER])
         except EventError as error:
             raise web.HTTPForbidden(text=str(error)) from None
-    return await handler(request)
+    collector = request.app.get(COLLECTOR)
+    token = CONTEXT.set((collector, request.get(USER))) if collector is not None else None
+    try:
+        return await handler(request)
+    finally:
+        if token is not None:
+            CONTEXT.reset(token)

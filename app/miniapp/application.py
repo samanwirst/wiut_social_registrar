@@ -4,12 +4,14 @@ import asyncio
 
 from aiohttp import web
 
+from app.analytics.instrumentation import COLLECTOR, http_analytics
 from app.broadcasts import BroadcastRepository
 from app.events.qr_designs import EventQrDesigns
 from app.events.table import EventTable
 from app.services.chat_files import ChatFiles
 from app.services.qr_designer import QrDesigner
 
+from .analytics_routes import administrator_access, install_routes
 from .assets import STATIC, STATIC_DIR, asset, health, ready
 from .auth import telegram_auth
 from .export_routes import export_participants
@@ -29,9 +31,19 @@ from .state import BOT, BROADCASTS, CHAT_FILES, EXPORT_LOCK, HEALTH, QR_DESIGNER
 from .table_routes import broadcasts, cancel_broadcast, create_broadcast, edit_cell, table_columns
 
 
-def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runtime_health=None):
+def create_web_app(
+    repository,
+    bot,
+    *,
+    static_dir=STATIC,
+    qr_designer=None,
+    runtime_health=None,
+    usage_collector=None,
+    admin_portal=None,
+):
     app = web.Application(
-        middlewares=[errors_and_headers, telegram_auth], client_max_size=128 * 1024
+        middlewares=[http_analytics, errors_and_headers, administrator_access, telegram_auth],
+        client_max_size=128 * 1024,
     )
     app[REPOSITORY], app[BOT] = repository, bot
     app[STATIC_DIR] = static_dir
@@ -40,6 +52,9 @@ def create_web_app(repository, bot, *, static_dir=STATIC, qr_designer=None, runt
     app[EXPORT_LOCK] = asyncio.Lock()
     app[QR_DESIGNER] = qr_designer if qr_designer is not None else QrDesigner()
     app[CHAT_FILES] = ChatFiles(repository, bot, app[QR_DESIGNER], app[EXPORT_LOCK])
+    if usage_collector is not None:
+        app[COLLECTOR] = usage_collector
+    install_routes(app, admin_portal)
     if runtime_health is not None:
         app[HEALTH] = runtime_health
 

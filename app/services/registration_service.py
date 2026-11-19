@@ -1,6 +1,8 @@
 import logging
 import secrets
+from time import perf_counter
 
+from app.analytics.instrumentation import error_category, track
 from app.repositories import RegistrationError, RegistrationRepository
 from registrar.errors import GraphError, SendStatusUnknown
 from registrar.models import validate_student_id
@@ -16,13 +18,26 @@ class RegistrationService:
 
     async def request_code(self, user_id: int, student_id: str) -> str:
         student_id = validate_student_id(student_id)
+        started = perf_counter()
         try:
             student = await self.registrar.find_student(student_id, refresh=True)
         except GraphError as error:
+            track(
+                "email_lookup",
+                outcome="error",
+                error=error_category(error),
+                duration_ms=(perf_counter() - started) * 1000,
+            )
             logger.warning("Registration lookup unavailable (%s)", error.diagnostic)
             if self.health:
                 self.health.incident("email", error)
             raise
+        track(
+            "email_lookup",
+            outcome="ok" if student else "rejected",
+            error=None if student else "not_found",
+            duration_ms=(perf_counter() - started) * 1000,
+        )
         if student is None:
             await self.repository.event(
                 user_id, "registration_student_not_found", requested_student_id=student_id

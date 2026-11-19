@@ -2,6 +2,7 @@ from aiogram import Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message, ReplyKeyboardRemove
 
+from app.analytics.instrumentation import track
 from app.chat_formatting import card, error_text, event_confirmation
 from app.dialogs.attachments import show_attachment
 from app.dialogs.broadcasts import open_composer, show_sent_message
@@ -43,6 +44,11 @@ async def cmd_start(
             event_id = event_id_from_payload(command.args)
             event, status = await event_repository.visit(message.from_user.id, event_id)
         except EventError as error:
+            track(
+                "form_rejected",
+                outcome="rejected",
+                error="closed" if "Registration closed" in str(error) else "validation",
+            )
             await message.answer(error_text(error))
             return
         if status == "needs_form":

@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
+from app.analytics.events import record
 from app.clock import utc_now
 from app.event_errors import EventError
 from app.events.access import owned_event, require_registered
@@ -58,6 +59,7 @@ class EventSettingsRepository:
                 created_at=self.clock(),
             )
             session.add(event)
+            record(session, "form_created", at=self.clock(), user_id=user_id, form_id=event.id)
         return event
 
     async def settings(self, user_id, event_id):
@@ -94,4 +96,14 @@ class EventSettingsRepository:
                 event.anonymous = changes.anonymous
             event.questions = questions
             event.revision += 1
+            record(
+                session,
+                "form_updated",
+                at=self.clock(),
+                user_id=user_id,
+                form_id=event.id,
+                anonymous=event.anonymous,
+                total=len(questions),
+                revision=event.revision,
+            )
         return event

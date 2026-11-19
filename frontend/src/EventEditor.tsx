@@ -8,6 +8,7 @@ import { Field } from './Field';
 import { Participants } from './Participants';
 import { EventShare } from './EventShare';
 import type { EventDetails, Notify } from './types';
+import { useAnalyticsScreen } from './analytics';
 
 type Tab = 'overview' | 'questions' | 'participants' | 'qr';
 const tabs = ['overview', 'questions', 'participants', 'qr'] as const;
@@ -16,6 +17,7 @@ export function EventEditor({ event, guard, detailBack, notify, onSaved }: {
   event: EventDetails; guard: MutableRefObject<() => boolean>; detailBack: MutableRefObject<(() => void) | null>; notify: Notify; onSaved: (event: EventDetails) => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
+  useAnalyticsScreen(tab, event.id);
   const [answerDirty, setAnswerDirty] = useState(false);
   const { draft, dirty, saving, change, save } = useEventDraft(event, guard, onSaved, notify, answerDirty);
   const qrDesigner = useQrDesign(event.id);
@@ -49,11 +51,11 @@ export function EventEditor({ event, guard, detailBack, notify, onSaved }: {
             </div>
             <Cell Component="div" className="settings-toggle" multiline subtitle="Turn this off to close the form to new responses"
               onClick={e => { if (!saving && !(e.target as Element).closest('label')) change({ registration_open: !draft.registration_open }); }}
-              after={<Switch aria-label="Accept registrations" checked={draft.registration_open} disabled={saving}
+              after={<Switch data-analytics="accept_registrations" aria-label="Accept registrations" checked={draft.registration_open} disabled={saving}
                 onChange={e => change({ registration_open: e.target.checked })} />}>Accept registrations</Cell>
             <Cell Component="div" className="settings-toggle" multiline subtitle="Can only be changed before the first registration"
               onClick={e => { if (!saving && !event.anonymous_locked && !(e.target as Element).closest('label')) change({ anonymous: !draft.anonymous }); }}
-              after={<Switch aria-label="Anonymous" checked={draft.anonymous} disabled={saving || event.anonymous_locked}
+              after={<Switch data-analytics="anonymous_mode" aria-label="Anonymous" checked={draft.anonymous} disabled={saving || event.anonymous_locked}
                 onChange={e => change({ anonymous: e.target.checked })} />}>Anonymous</Cell>
           </Section>
         </List> : <Questions questions={draft.questions} locked={event.form_locked} disabled={saving} onChange={questions => change({ questions })} />}

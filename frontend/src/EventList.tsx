@@ -2,10 +2,12 @@ import { Caption, Cell, List, Placeholder, Section, Title } from '@telegram-apps
 import { Pagination } from './Pagination';
 import type { EventsPage } from './types';
 import { Chevron } from './Icons';
+import { useAnalyticsScreen } from './analytics';
 
 export function EventList({ data, onOpen, onPage, busy }: {
   data: EventsPage; onOpen: (id: string) => void; onPage: (page: number) => void; busy: boolean;
 }) {
+  useAnalyticsScreen('forms');
   return <>
     <div className="page-heading"><Title level="1" Component="h1">Your forms</Title>
       <Caption className="muted">Events, advisor applications, and more</Caption></div>
