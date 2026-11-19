@@ -21,6 +21,7 @@ class EventChanges:
     questions: list[dict]
     revision: int
     department: str | None = None
+    anonymous: bool | None = None
 
     @classmethod
     def parse(cls, data):
@@ -35,7 +36,7 @@ class EventChanges:
         if (
             not isinstance(data, dict)
             or not required <= set(data)
-            or set(data) - required - {"department"}
+            or set(data) - required - {"department", "anonymous"}
         ):
             raise EventError(
                 "Submit the event title, description, status, retention, questions, and revision."
@@ -50,6 +51,8 @@ class EventChanges:
         if not isinstance(data["registration_open"], bool) or type(data["revision"]) is not int:
             raise EventError("Supply a valid registration status and revision.")
         department = data.get("department")
+        if "anonymous" in data and type(data["anonymous"]) is not bool:
+            raise EventError("Choose whether this form is anonymous")
         if "department" in data and (
             not isinstance(department, str) or len(department.strip()) > 100
         ):
@@ -62,4 +65,5 @@ class EventChanges:
             validate_questions(data["questions"]),
             data["revision"],
             department.strip() if department is not None else None,
+            data.get("anonymous"),
         )

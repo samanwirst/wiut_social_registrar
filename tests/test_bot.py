@@ -237,7 +237,6 @@ async def test_me_never_shares_profile_in_a_group(app):
         "/mail 00000001",
         "/members",
         "/members invalid-id",
-        "/cancel",
     ],
 )
 async def test_removed_commands_cannot_look_up_or_send(app, text, registered):
@@ -352,16 +351,17 @@ async def test_private_chat_required(app):
 
 
 @pytest.mark.asyncio
-async def test_removed_cancel_preserves_pending_code_and_cooldown(app):
+async def test_cancel_clears_pending_code_without_resetting_cooldown(app):
     await send(app, "00000001")
-    code = app.registrar_service.send_verification_code.await_args.args[1]
     replies = await send(app, "/cancel")
-    assert "not available" in replies[-1].text
-    assert await app.registration_repository.pending(100) is not None
+    assert "Cancelled" in replies[-1].text
+    assert isinstance(replies[-1].reply_markup, ReplyKeyboardRemove)
+    assert await app.registration_repository.pending(100) is None
     replies = await send(app, "/resend")
+    assert "student ID first" in replies[-1].text
+    replies = await send(app, "00000001")
     assert "wait" in replies[-1].text
-    replies = await send(app, code)
-    assert replies[-1].reply_markup.keyboard[0][0].request_contact
+    assert await app.registration_repository.pending(100) is None
     assert app.registrar_service.send_verification_code.await_count == 1
     assert await app.registration_repository.verified(100) is None
 
@@ -447,16 +447,16 @@ async def test_phone_step_blocks_text_lookups_and_resends_and_resumes_on_start(a
 
 
 @pytest.mark.asyncio
-async def test_removed_cancel_keeps_phone_step_and_verified_email(app):
+async def test_cancel_leaves_phone_step_and_clears_unfinished_identity(app):
     await send(app, "00000001")
     await send(app, app.registrar_service.send_verification_code.await_args.args[1])
     replies = await send(app, "/cancel")
-    assert replies[-1].reply_markup.keyboard[0][0].request_contact
-    assert await app.registration_repository.awaiting_phone(100)
+    assert isinstance(replies[-1].reply_markup, ReplyKeyboardRemove)
+    assert not await app.registration_repository.awaiting_phone(100)
     replies = await send(
         app, contact=Contact(phone_number="+998901234567", first_name="User", user_id=100)
     )
-    assert "education level" in replies[-1].text
+    assert "email first" in replies[-1].text
     assert app.registrar_service.send_verification_code.await_count == 1
     assert await app.registration_repository.verified(100) is None
 
@@ -670,14 +670,15 @@ async def test_education_callback_requires_previous_steps_and_rejects_invalid_op
 
 
 @pytest.mark.asyncio
-async def test_removed_cancel_keeps_education_selection_available(app):
+async def test_cancel_invalidates_old_education_buttons(app):
     await reach_education_step(app)
     replies = await send(app, "/cancel")
-    assert replies[-1].reply_markup.inline_keyboard[0][0].text == "CIFS"
-    assert await app.registration_repository.awaiting_education(100)
-    await callback(app, "education:4")
+    assert isinstance(replies[-1].reply_markup, ReplyKeyboardRemove)
     assert not await app.registration_repository.awaiting_education(100)
-    assert await app.registration_repository.verified(100) is not None
+    await callback(app, "education:4")
+    assert "Confirm your email" in methods(app, AnswerCallbackQuery)[-1].text
+    assert not await app.registration_repository.awaiting_education(100)
+    assert await app.registration_repository.verified(100) is None
 
 
 @pytest.mark.asyncio
@@ -825,21 +826,24 @@ async def test_scanning_second_event_leaves_unfinished_first_questionnaire(app):
 
 
 @pytest.mark.asyncio
-async def test_removed_cancel_preserves_questionnaire_progress_and_verified_account(app):
+async def test_cancel_discards_questionnaire_but_preserves_verified_account(app):
     event = await form_event(app, [("First?", "text", True), ("Second?", "text", True)])
     await send(app, f"/start event_{event.id}")
     await send(app, "Partial")
     before = await app.event_survey.resume(100)
     replies = await send(app, "/cancel")
-    assert "Second?" in replies[-1].text
+    assert "Cancelled" in replies[-1].text
     after = await app.event_survey.resume(100)
-    assert after.index == before.index and after.answers == before.answers
-    assert await app.event_survey.active(100)
+    assert after is None
+    assert not await app.event_survey.active(100)
+    assert await app.event_repository.pending_titles(100) == []
     assert await app.registration_repository.verified(100)
     assert (await app.event_repository.members(100, event.id)).total == 0
-    replies = await send(app, "Final answer")
-    assert "Your response has been submitted for" in replies[-1].text
-    assert (await app.event_repository.members(100, event.id)).total == 1
+    await callback(app, f"form:{before.token}:skip")
+    assert "expired" in methods(app, AnswerCallbackQuery)[-1].text
+    await send(app, f"/start event_{event.id}")
+    restarted = await app.event_survey.resume(100)
+    assert restarted.index == 0 and restarted.answers == {} and restarted.token != before.token
 
 
 @pytest.mark.asyncio

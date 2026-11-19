@@ -15,6 +15,8 @@ def event_json(event):
         "title": event.title,
         "description": event.description,
         "registration_open": event.registration_open,
+        "anonymous": event.anonymous,
+        "anonymous_locked": event.anonymous_locked,
         "questions": event.questions,
         "response_retention_days": event.response_retention_days,
         "revision": event.revision,
@@ -75,6 +77,13 @@ async def event_members(request):
     page = await request.app[REPOSITORY].answer_page(
         request[USER], request.match_info["event_id"], page_number(request)
     )
+    bot_username = None
+    for member in page.members:
+        for value in (member.get("answers") or {}).values():
+            if isinstance(value, dict) and "payload" in value:
+                if bot_username is None:
+                    bot_username = (await request.app[BOT].me()).username
+                value["url"] = f"https://t.me/{bot_username}?start={value['payload']}"
     return web.json_response(
         {
             "members": page.members,
@@ -85,6 +94,7 @@ async def event_members(request):
             "questions": page.event.questions,
             "columns": page.event.table_columns,
             "columns_revision": page.event.columns_revision,
+            "anonymous": page.event.anonymous,
         }
     )
 

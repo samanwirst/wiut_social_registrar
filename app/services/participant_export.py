@@ -15,6 +15,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from app.clock import utc_now
 from app.event_errors import EventError
+from app.media_answers import MEDIA_LABELS
 from app.services.participant_export_schema import export_columns, export_info, utc_timestamp
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -59,6 +60,15 @@ def headers(labels):
 def cell_value(value, kind):
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("kind") in MEDIA_LABELS:
+        return "\n".join(
+            text(item)
+            for item in [
+                value.get("file_name") or MEDIA_LABELS[value["kind"]],
+                value.get("caption"),
+            ]
+            if item
+        )
     if isinstance(value, list):
         return "\n".join(text(item) for item in value)
     if type(value) is bool:
@@ -87,6 +97,8 @@ def member_value(member, column):
             )
         return member[key]
     if scope == "system":
+        if key == "response_number":
+            return member[key]
         if key == "registered_at_utc":
             return utc_timestamp(member["registered_at"])
         return member[key] if key == "row_revision" else str(member[key])
@@ -140,15 +152,24 @@ def participants_xlsx(page, *, clock=utc_now):
     resolved = dict(zip(order, headers([definitions[i].label for i in order]), strict=True))
     names = [resolved[i] for i in range(len(definitions))]
     append_row(worksheet, names)
-    worksheet.freeze_panes = "C2"
+    anonymous = getattr(page.event, "anonymous", False)
+    worksheet.freeze_panes = "B2" if anonymous else "C2"
     worksheet["A1"].comment = Comment(
-        "Export info and Columns describe this file for import. "
-        "Unhide the technical columns to inspect participant IDs.",
+        "Anonymous responses; no student identities or contacts are included."
+        if anonymous
+        else "Export info and Columns describe this file for import. Unhide the technical columns to inspect participant IDs.",
         "WIUT Social Registrar",
     )
-    for member in page.members:
+    for index, member in enumerate(page.members, 1):
+        if anonymous:
+            member = {**member, "response_number": index}
         append_row(worksheet, [member_value(member, column) for column in definitions])
-    format_sheet(worksheet, [16, 30, 24, 36, 22, 16] + [45] * (len(names) - 6), "Participants")
+    widths = (
+        [12] + [45] * (len(names) - 1)
+        if anonymous
+        else [16, 30, 24, 36, 22, 16] + [45] * (len(names) - 6)
+    )
+    format_sheet(worksheet, widths, "Participants")
     for index, column in enumerate(definitions, 1):
         worksheet.column_dimensions[get_column_letter(index)].hidden = column.hidden
 

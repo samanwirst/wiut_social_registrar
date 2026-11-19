@@ -24,22 +24,28 @@ async def choose_education(
         await callback.answer("Choose CIFS, Level 4, Level 5, or Level 6", show_alert=True)
         return
     try:
-        pending_titles = await event_repository.pending_titles(callback.from_user.id)
-        student = await registration_repository.complete_registration(callback.from_user.id, level)
+        student, outcomes = await registration_repository.complete_registration_with_events(
+            callback.from_user.id, level
+        )
     except RegistrationError as error:
         await callback.answer(error_text(error), show_alert=True)
         return
     await callback.answer()
     await update_keyboard(callback.message, None)
     text = student_profile(student, title="Registration complete", education_level=level)
-    if pending_titles:
-        pending_forms = await event_repository.pending_forms(callback.from_user.id)
+    if outcomes["registered"]:
+        text += Text("\n\nYour saved forms are complete\n", "\n".join(outcomes["registered"]))
+    if outcomes["questions"]:
         text += Text(
-            "\n\nForms without extra questions are complete\n"
-            "Answer the remaining form questions below to finish\n"
-            if pending_forms
-            else "\n\nYour saved forms are complete\n"
-        ) + Text("\n".join(pending_titles))
+            "\n\nAnswer the remaining form questions below to finish\n",
+            "\n".join(outcomes["questions"]),
+        )
+    if outcomes["closed"]:
+        text += Text(
+            "\n\nRegistration closed\n",
+            "\n".join(outcomes["closed"]),
+            "\nThe organizer is no longer accepting responses",
+        )
     await callback.message.answer(
         **text.as_kwargs(), reply_markup=main_menu(mini_app_url, can_open_panel=can_open_panel)
     )

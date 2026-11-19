@@ -3,6 +3,8 @@
 from aiogram.utils.deep_linking import create_start_link
 from aiohttp import web
 
+from app.events.selection import member_id
+
 from .input import body
 from .state import BOT, BROADCASTS, TABLE, USER
 
@@ -20,13 +22,10 @@ async def table_columns(request):
 
 async def edit_cell(request):
     raw = request.match_info["member_id"]
-    if not raw.isascii() or not raw.isdigit() or len(raw) > 19:
-        raise web.HTTPBadRequest(text="Invalid person ID")
-    if not 0 < int(raw) < 2**63:
-        raise web.HTTPBadRequest(text="Invalid person ID")
+    selected = member_id(int(raw) if raw.isascii() and raw.isdigit() and len(raw) <= 19 else raw)
     return web.json_response(
         await request.app[TABLE].edit(
-            request[USER], request.match_info["event_id"], int(raw), await body(request)
+            request[USER], request.match_info["event_id"], selected, await body(request)
         )
     )
 

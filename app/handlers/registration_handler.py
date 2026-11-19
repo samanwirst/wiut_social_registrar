@@ -39,7 +39,10 @@ async def unsupported_message(
     message: Message, registration_repository, event_survey, verified_student
 ) -> None:
     if await event_survey.active(message.from_user.id):
-        await resume_survey(message, event_survey)
+        if message.text and message.text.startswith("/"):
+            await resume_survey(message, event_survey)
+        else:
+            await receive_answer(message, event_survey)
     elif await prompt_remaining_profile_fields(message, registration_repository):
         return
     else:

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, errorMessage } from '../api';
 import { showFileChat } from '../telegram';
+import type { MemberId } from '../types';
 
 interface Delivery { id: string; status: 'preparing' | 'sending' | 'sent' | 'failed' | 'unknown'; error: string; chat_url?: string }
-export interface ChatFileOptions { kind: 'participants' | 'qr'; transparent: boolean; design_id: string; member_ids?: number[] }
+export interface ChatFileOptions { kind: 'participants' | 'qr'; transparent: boolean; design_id: string; member_ids?: MemberId[] }
 
 export function useChatFile(eventId: string) {
   const [busy, setBusy] = useState(false);

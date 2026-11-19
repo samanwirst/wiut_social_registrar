@@ -21,6 +21,7 @@ COMMANDS = {
     "panel": "Forms and responses",
     "resend": "Resend email code",
     "me": "View your own student profile",
+    "cancel": "Cancel the current step",
     "help": "Help and commands",
     "info": "About the bot and project",
 }
@@ -36,7 +37,7 @@ def chat_commands(*, registered=False, organizer=False) -> list[BotCommand]:
         names.append("resend")
     if registered:
         names.append("me")
-    names.extend(("help", "info"))
+    names.extend(("cancel", "help", "info"))
     descriptions = {**COMMANDS, "start": "Start the bot"} if registered else COMMANDS
     return [BotCommand(command=name, description=descriptions[name]) for name in names]
 

@@ -25,6 +25,22 @@ network failures, bounded recovery history, and prevention of sensitive data in 
 All Bot API, Docker, and systemd transports in those tests are mocked; operational setup alerts
 are an explicit manual action outside pytest. Tests verify private atomic state, recipient
 allowlists, notification deduplication/backoff, bounded repair, and status-aware `/start` resume.
+
+Media regressions use synthetic Telegram file references for photos, documents, voice,
+video, audio, animations and video messages. They check restart recovery, final-answer
+atomicity, type validation, album rejection, owner-only retrieval, expiry, sanitized API/XLSX
+projections and prevention of forged references through HTTP/cell edits. `/cancel` checks
+cover code/phone/education/form stages, stale buttons, preserved completed data and quotas,
+and the distinction between unconfirmed composition and confirmed deliveries. Browser QA
+creates a file question and opens its answer through the mocked Telegram SDK.
+
+Anonymous-form checks exercise both DBs: immutable anonymity after enrollment, revision changes
+for pending drafts, duplicate prevention, event-scoped opaque selection/edit IDs, no profile or
+timestamp data in organizer/API/export projections, media links/header privacy, blocked messaging,
+expiry, migration of old identified records and concurrent projection/mode-change/submission.
+Closed-registration cases include new scans and closure while student verification is in progress.
+Browser QA enables Anonymous, checks its lock after submission, verifies answer-only columns and
+disabled messaging, selects two pages and inspects the delivered anonymous workbook.
 Notification-policy checks cover transient error suppression, confirmed outages, grouped
 availability symptoms, dependency inhibition, stable recovery, per-recipient delivery tracking,
 obsolete queue removal, removed administrators, monitor gaps/incomplete probes, and migration

@@ -28,7 +28,7 @@ class FileDelivery:
     transparent: bool
     design_id: str
     created_at: float
-    member_ids: tuple[int, ...] | None = None
+    member_ids: tuple[int | str, ...] | None = None
     status: str = "preparing"
     error: str = ""
     task: asyncio.Task | None = field(default=None, repr=False)

@@ -5,6 +5,7 @@ from aiogram.utils.formatting import Bold, Italic, Text
 
 from app.chat_formatting import card, error_text, event_confirmation
 from app.event_errors import EventError
+from app.media_answers import MEDIA_INSTRUCTIONS, attachment_from_message
 
 
 def question_keyboard(step):
@@ -33,6 +34,7 @@ async def send_question(message, step):
         "number": "Send a number as a message",
         "single_choice": "Choose one option below",
         "multiple_choice": "Choose one option below",
+        **MEDIA_INSTRUCTIONS,
     }[question["type"]]
     text = Text(
         Bold(step.event.title),
@@ -43,6 +45,15 @@ async def send_question(message, step):
         "\n\n",
         instruction,
     )
+    if step.index == 0:
+        text += Text(
+            "\n\n",
+            Italic(
+                "Anonymous response · Your student profile is hidden\nAnswers and files are shared as you submit them"
+                if step.event.anonymous
+                else "Your student profile will be shared with the organizer"
+            ),
+        )
     await message.answer(**text.as_kwargs(), reply_markup=question_keyboard(step))
 
 
@@ -59,7 +70,10 @@ async def resume_survey(message, event_survey, user_id=None):
 
 async def receive_answer(message, event_survey):
     try:
-        step, completed = await event_survey.respond(message.from_user.id, text=message.text)
+        attachment = attachment_from_message(message)
+        step, completed = await event_survey.respond(
+            message.from_user.id, text=message.text, attachment=attachment
+        )
     except EventError as error:
         await message.answer(error_text(error))
         return
