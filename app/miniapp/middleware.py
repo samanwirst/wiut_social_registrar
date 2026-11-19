@@ -53,4 +53,13 @@ async def errors_and_headers(request, handler):
             "frame-ancestors 'self' https://telegram.org https://*.telegram.org",
         }
     )
+    if request.path == "/admin" or request.path.startswith("/admin/"):
+        response.headers.update(
+            {
+                "X-Frame-Options": "DENY",
+                "X-Robots-Tag": "noindex, nofollow",
+                "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            }
+        )
     return response

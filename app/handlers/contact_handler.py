@@ -1,6 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import Message, ReplyKeyboardRemove
 
+from app.analytics.instrumentation import track
 from app.chat_formatting import card, error_text
 from app.dialogs.registration import education_prompt, phone_prompt
 from app.keyboards import main_menu
@@ -30,6 +31,7 @@ async def receive_contact(
         )
         return
     if message.forward_origin is not None:
+        track("registration_rejected", stage="phone", outcome="rejected", error="validation")
         await phone_prompt(
             message,
             "Share your own Telegram contact using the button below; forwarded contacts cannot be used",
@@ -42,6 +44,7 @@ async def receive_contact(
             message.contact.phone_number,
         )
     except RegistrationError as error:
+        track("registration_rejected", stage="phone", outcome="rejected", error="validation")
         await phone_prompt(message, error_text(error))
         return
     await message.answer(

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, delete, func, or_, select, update
 
+from app.analytics.events import record
 from app.clock import utc_now
 from app.event_errors import EventError
 from app.events.access import owned_event, require_registered
@@ -330,6 +331,14 @@ class BroadcastRepository:
             if recent and (self.clock() - max(recent)).total_seconds() < 60:
                 raise EventError("Wait a minute before sending another group message")
             draft.status, draft.queued_at = "queued", self.clock()
+            record(
+                session,
+                "broadcast_queued",
+                at=self.clock(),
+                user_id=owner,
+                form_id=draft.event_id,
+                count=draft.total,
+            )
             return await self._snapshot(session, draft)
 
     async def cancel(self, owner, draft_id):
@@ -426,6 +435,16 @@ class BroadcastRepository:
             recipient.updated_at = self.clock()
             if retry_after is not None:
                 recipient.next_attempt_at = self.clock() + timedelta(seconds=max(1, retry_after))
+            if status in {"sent", "failed", "unknown"}:
+                record(
+                    session,
+                    "broadcast_delivery",
+                    at=self.clock(),
+                    form_id=draft.event_id,
+                    status=status,
+                    outcome="ok" if status == "sent" else "error",
+                    error="telegram" if status != "sent" else None,
+                )
             await session.flush()
             draft.counts = await self._counts(session, draft)
             if not any(draft.counts.get(s) for s in ["pending", "sending"]):

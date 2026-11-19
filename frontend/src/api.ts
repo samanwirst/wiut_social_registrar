@@ -1,4 +1,5 @@
 import { telegram } from './telegram';
+import { track } from './analytics';
 
 export class ApiError extends Error {
   constructor(message: string, readonly status = 0, readonly retryAfter = 0) { super(message); }
@@ -16,6 +17,7 @@ async function request(path: string, options: RequestInit = {}, responseType: 'j
       headers: { Authorization: `tma ${telegram?.initData ?? ''}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
+      track('client_error', { error: response.status >= 500 ? 'internal' : response.status === 429 ? 'rate_limit' : response.status === 401 || response.status === 403 ? 'authorization' : 'validation' });
       const data = await response.json().catch(() => null);
       const retry = Number(data?.retry_after ?? response.headers.get('Retry-After'));
       throw new ApiError(typeof data?.error === 'string' ? data.error : 'Please try again later.',
@@ -25,6 +27,7 @@ async function request(path: string, options: RequestInit = {}, responseType: 'j
     return responseType === 'blob' ? await response.blob() : await response.json();
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (!options.signal?.aborted) track('client_error', { error: controller.signal.aborted ? 'timeout' : 'network' });
     throw new ApiError(controller.signal.aborted ? 'The request was interrupted. Please try again.'
       : 'Could not connect to the event panel. Please try again.');
   } finally {

@@ -5,14 +5,16 @@ import { EventEditor } from './EventEditor';
 import { EventList } from './EventList';
 import { telegram, useTelegramTheme } from './telegram';
 import { Chevron } from './Icons';
+import { useInterfaceAnalytics } from './analytics';
 
 function Workspace() {
+  useInterfaceAnalytics();
   const [notice, setNotice] = useState<{ message: string; error: boolean } | null>(null);
   const notify = useCallback((message: string, error = false) => setNotice({ message, error }), []);
   const { event, events, loading, error, retry, guard, detailBack, listPage, loadEvents, openEvent, onSaved } = useWorkspace(notify);
 
   return <>
-    {event ? <header className="brandbar"><Button type="button" mode="plain" size="s" before={<Chevron direction="left" />} disabled={loading} onClick={() => { void loadEvents(listPage); }}>
+    {event ? <header className="brandbar"><Button data-analytics="back_to_forms" type="button" mode="plain" size="s" before={<Chevron direction="left" />} disabled={loading} onClick={() => { void loadEvents(listPage); }}>
       All forms</Button></header> : null}
     <main className="page" aria-busy={loading}>
       {error ? <Placeholder header="We couldn't open your workspace" description={error}

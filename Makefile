@@ -24,6 +24,7 @@ postgres-test:
 
 browser: frontend
 	$(PYTHON) tests/browser_miniapp.py
+	$(PYTHON) tests/browser_analytics.py
 
 docker-test:
 	docker build --target test -t wiut-social-registrar:test .

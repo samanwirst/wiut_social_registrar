@@ -45,8 +45,8 @@ async def client(repository):
     [
         "",
         "user=forged",
-        signed_init_data(age=3601),
-        signed_init_data(age=-120),
+        pytest.param({"age": 3601}, id="expired"),
+        pytest.param({"age": -120}, id="future"),
         signed_init_data(user_id=0),
         signed_init_data(user='{"id":100,"first_name":"Bot","is_bot":true}'),
         signed_init_data() + "&user=duplicate",
@@ -54,6 +54,10 @@ async def client(repository):
     ],
 )
 def test_auth_rejects_forged_expired_future_duplicate_and_bot_data(raw):
+    # Sign relative to execution, not collection: a slow suite can outlive the
+    # future-date allowance and accidentally turn that invalid input into a valid one.
+    if isinstance(raw, dict):
+        raw = signed_init_data(**raw)
     with pytest.raises(web.HTTPUnauthorized):
         validate_init_data(raw, TOKEN)
 

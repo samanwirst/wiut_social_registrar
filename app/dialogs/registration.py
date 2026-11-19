@@ -12,6 +12,7 @@ from aiogram.types import (
 )
 from aiogram.utils.formatting import Bold, Code, Text
 
+from app.analytics.instrumentation import error_category, track
 from app.chat_formatting import card, error_text
 from app.education import EDUCATION_LEVELS
 from registrar.errors import GraphError
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def phone_prompt(message: Message, text: str | None = None) -> None:
+    track("registration_prompt", stage="phone")
     await message.answer(
         **card(
             "Step 3 of 4",
@@ -41,6 +43,7 @@ async def phone_prompt(message: Message, text: str | None = None) -> None:
 
 
 async def education_prompt(message: Message) -> None:
+    track("registration_prompt", stage="education")
     buttons = [
         InlineKeyboardButton(text=label, callback_data=f"education:{key}")
         for key, label in EDUCATION_LEVELS.items()
@@ -55,6 +58,7 @@ async def education_prompt(message: Message) -> None:
 
 
 async def code_prompt(message, status):
+    track("registration_prompt", stage="email", status=status)
     text = (
         "Enter the 6-digit code from your university email\n"
         "The code expires in 10 minutes\n\n"
@@ -75,6 +79,7 @@ async def code_prompt(message, status):
 
 
 async def welcome(message: Message) -> None:
+    track("registration_prompt", stage="student_id")
     content = Text(
         Bold("Welcome to Social Registrar"),
         "\n\n",
@@ -91,9 +96,11 @@ async def request_code(message, service, student_id):
     try:
         status = await service.request_code(message.from_user.id, student_id)
     except ValueError as error:
+        track("registration_rejected", stage="student_id", outcome="rejected", error="validation")
         await message.answer(error_text(error))
         return
     except GraphError as error:
+        track("registration_rejected", stage="email", outcome="error", error=error_category(error))
         logger.warning("Registration email unavailable (%s).", type(error).__name__)
         await message.answer(
             "Registration is temporarily unavailable\nWe couldn't send a verification email — please try again later"

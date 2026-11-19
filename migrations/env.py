@@ -3,6 +3,7 @@ from pathlib import Path
 
 from alembic import context
 
+from app.analytics import models as analytics_models  # noqa: F401
 from app.models import Base
 
 

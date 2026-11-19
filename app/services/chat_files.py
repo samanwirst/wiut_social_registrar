@@ -9,6 +9,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramNetworkError, TelegramS
 from aiogram.types import BufferedInputFile
 from aiogram.utils.deep_linking import create_start_link
 
+from app.analytics.instrumentation import track
 from app.event_errors import EventError
 from app.events.selection import selected_member_ids
 from app.services.event_service import event_qr
@@ -154,6 +155,15 @@ class ChatFiles:
         except Exception as error:
             job.status, job.error = "failed", "Could not prepare this file — please try again later"
             logger.warning("Chat file preparation failed (%s)", type(error).__name__)
+        finally:
+            track(
+                "file_delivery",
+                form_id=job.event_id,
+                status=job.status,
+                transparent=job.transparent,
+                action="export_xlsx" if job.kind == "participants" else "download_qr",
+                outcome="ok" if job.status == "sent" else "error",
+            )
         if job.status == "failed" and not submitted:
             # The panel may already be minimized. Report preparation failures there too.
             try:

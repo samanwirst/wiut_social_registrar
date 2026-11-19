@@ -31,7 +31,7 @@ export function Questions({ questions, locked, disabled, onChange }: {
             disabled={locked || disabled} placeholder="What would you like to ask?" onChange={e => change(question.id, { label: e.target.value })} /></Field>
           <Field label="Answer type">{question.type === 'number' || question.type === 'single_choice'
             ? <Input aria-label="Answer type" value={question.type === 'number' ? 'Number' : 'Single choice'} readOnly disabled />
-            : <Select aria-label="Answer type" value={question.type} disabled={locked || disabled}
+            : <Select data-analytics="question_type" aria-label="Answer type" value={question.type} disabled={locked || disabled}
               onChange={e => {
                 const type = e.target.value as QuestionType;
                 change(question.id, { type, options: type === 'multiple_choice' && question.options.length < 2
@@ -42,17 +42,17 @@ export function Questions({ questions, locked, disabled, onChange }: {
           {['single_choice', 'multiple_choice'].includes(question.type) ? <PollOptions options={question.options}
             locked={locked} disabled={disabled} onChange={options => change(question.id, { options })} /> : null}
         </div>
-        <Cell Component="label" after={<Switch aria-label="Required question" checked={question.required} disabled={locked || disabled}
+        <Cell Component="label" after={<Switch data-analytics="required_question" aria-label="Required question" checked={question.required} disabled={locked || disabled}
           onChange={e => change(question.id, { required: e.target.checked })} />}>Required question</Cell>
         {!locked ? <div className="question-actions actions">
-          <Button type="button" size="s" mode="plain" aria-label={`Move question ${index + 1} up`} disabled={disabled || index === 0} onClick={() => move(index, -1)}><Chevron direction="up" /></Button>
-          <Button type="button" size="s" mode="plain" aria-label={`Move question ${index + 1} down`} disabled={disabled || index === questions.length - 1} onClick={() => move(index, 1)}><Chevron direction="down" /></Button>
-          <Button type="button" size="s" mode="plain" className="danger" disabled={disabled}
+          <Button data-analytics="reorder_question" type="button" size="s" mode="plain" aria-label={`Move question ${index + 1} up`} disabled={disabled || index === 0} onClick={() => move(index, -1)}><Chevron direction="up" /></Button>
+          <Button data-analytics="reorder_question" type="button" size="s" mode="plain" aria-label={`Move question ${index + 1} down`} disabled={disabled || index === questions.length - 1} onClick={() => move(index, 1)}><Chevron direction="down" /></Button>
+          <Button data-analytics="remove_question" type="button" size="s" mode="plain" className="danger" disabled={disabled}
             onClick={() => onChange(questions.filter(q => q.id !== question.id))}>Remove</Button>
         </div> : null}
       </Section>)}
     </List>
-    {!locked ? <Button type="button" mode="bezeled" stretched before={<PlusIcon />} disabled={disabled || questions.length >= 20}
+    {!locked ? <Button data-analytics="add_question" type="button" mode="bezeled" stretched before={<PlusIcon />} disabled={disabled || questions.length >= 20}
       onClick={() => onChange([...questions, { id: crypto.randomUUID(), label: '', type: 'text', required: true, options: [] }])}>Add question</Button> : null}
   </>;
 }

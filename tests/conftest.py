@@ -27,7 +27,8 @@ async def repository(request, tmp_path):
         async with db.engine.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE pending_event_registrations, event_registrations, events, "
+                    "TRUNCATE usage_events, admin_login_attempts, admin_challenges, admin_sessions, analytics_settings, "
+                    "pending_event_registrations, event_registrations, events, "
                     "registration_events, verification_challenges, telegram_users, "
                     "outlook_profiles RESTART IDENTITY CASCADE"
                 )

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from aiogram.utils.token import TokenValidationError, validate_token
 
+from app.configuration.analytics import AnalyticsSettings
 from app.configuration.database import load_database_url
 from app.configuration.miniapp import load_mini_app
 from app.configuration.qr_images import QrImageSettings
@@ -30,6 +31,7 @@ class BotSettings:
     mini_app_tls_key_file: Path | None = None
     qr_images: QrImageSettings = field(default_factory=QrImageSettings, repr=False)
     admin_ids: tuple[int, ...] = ()
+    analytics: AnalyticsSettings = field(default_factory=AnalyticsSettings, repr=False)
 
     @classmethod
     def load(cls, env_file: Path | None = None) -> BotSettings:
@@ -65,6 +67,9 @@ class BotSettings:
             administrators = admin_ids(values.get("BOT_ADMIN_IDS"))
         except ValueError as error:
             raise ConfigurationError(str(error)) from None
+        analytics = AnalyticsSettings.load(values)
+        if analytics.password_hash and not mini.url.startswith("https://"):
+            raise ConfigurationError("The analytics website requires an HTTPS MINI_APP_URL")
         return cls(
             token=token,
             graph=graph,
@@ -79,4 +84,5 @@ class BotSettings:
             mini_app_tls_key_file=mini.key_file,
             qr_images=QrImageSettings.load(values),
             admin_ids=administrators,
+            analytics=analytics,
         )

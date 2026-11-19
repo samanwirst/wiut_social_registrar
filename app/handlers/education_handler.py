@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.utils.formatting import Text
 
+from app.analytics.instrumentation import track
 from app.chat_formatting import error_text, student_profile
 from app.dialogs.messages import update_keyboard
 from app.dialogs.surveys import resume_survey
@@ -28,6 +29,7 @@ async def choose_education(
             callback.from_user.id, level
         )
     except RegistrationError as error:
+        track("registration_rejected", stage="education", outcome="rejected", error="validation")
         await callback.answer(error_text(error), show_alert=True)
         return
     await callback.answer()

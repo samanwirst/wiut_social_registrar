@@ -68,13 +68,13 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     <div className="table-tools">
       <Caption>{data?.total ?? '…'} {data?.anonymous ? data.total === 1 ? 'response' : 'responses' : data?.total === 1 ? 'person' : 'people'} · 10 per page</Caption>
       <div className="actions">
-        <Button type="button" size="s" mode="bezeled" disabled={loading} onClick={reload}>Refresh</Button>
+        <Button data-analytics="refresh" type="button" size="s" mode="bezeled" disabled={loading} onClick={reload}>Refresh</Button>
       </div>
     </div>
     {data ? <TableColumns formId={eventId} columns={data.columns} revision={data.columns_revision} onChanged={reload} /> : null}
     <div className="audience-tools">
       <Caption role="status">{selected.size} selected{selected.size ? ' across pages' : ''}</Caption>
-      <div className="actions">{!data?.anonymous ? <Button type="button" size="s" mode="bezeled" disabled={!selected.size || preparing} loading={preparing} onClick={() => { void prepare(); }}>Prepare message</Button> : null}
+      <div className="actions">{!data?.anonymous ? <Button data-analytics="prepare_message" type="button" size="s" mode="bezeled" disabled={!selected.size || preparing} loading={preparing} onClick={() => { void prepare(); }}>Prepare message</Button> : null}
         <ExportParticipants key={eventId} eventId={eventId} selected={selected} disabled={preparing} /></div>
       {composeError ? <Caption role="alert" className="danger">{composeError}</Caption> : null}
     </div>

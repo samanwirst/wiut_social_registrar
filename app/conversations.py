@@ -2,6 +2,7 @@
 
 from sqlalchemy import delete, select, update
 
+from app.analytics.events import record
 from app.models import (
     Broadcast,
     BroadcastRecipient,
@@ -21,6 +22,7 @@ async def cancel_current(database, user_id, now):
         )
         if user is None:
             return
+        record(session, "conversation_cancelled", at=now, user_id=user_id)
         if not registration_complete(user):
             user.verified_at = user.outlook_profile_id = None
             user.phone_number = user.phone_shared_at = None

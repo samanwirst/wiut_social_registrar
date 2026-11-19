@@ -6,10 +6,12 @@ import { CELL_TEXT_LIMIT, useCellEditor } from './hooks/useCellEditor';
 import type { CellEditorProps } from './hooks/useCellEditor';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { memberLabel } from './types';
+import { useAnalyticsScreen } from './analytics';
 
 export function AnswerDetails({ back, onClose, onDirtyChange, initialDraft, ...props }: CellEditorProps & {
   back: MutableRefObject<(() => void) | null>; onClose: () => void; onDirtyChange: (dirty: boolean) => void; initialDraft?: string;
 }) {
+  useAnalyticsScreen('answer', props.formId);
   const { value, draft, setDraft, saving, pending, error, setError, expired, save } = useCellEditor(props, initialDraft);
   const [editing, setEditing] = useState(initialDraft !== undefined);
   const dirty = editing && (draft ?? '') !== (value ?? '');
@@ -32,7 +34,7 @@ export function AnswerDetails({ back, onClose, onDirtyChange, initialDraft, ...p
     style={{ '--answer-viewport-height': `${size.height}px`, '--answer-viewport-top': `${size.top}px` } as CSSProperties}
     onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); } }}>
     <div className="answer-header"><span>{props.scope === 'answer' ? 'Answer' : 'Value'}</span>
-      <IconButton type="button" mode="plain" size="s" aria-label="Close answer" disabled={saving} onClick={close}><CloseIcon /></IconButton></div>
+      <IconButton data-analytics="close_answer" type="button" mode="plain" size="s" aria-label="Close answer" disabled={saving} onClick={close}><CloseIcon /></IconButton></div>
     <div className="answer-content" data-vaul-no-drag>
       <Caption id={personId} className="muted">{props.member.response_id ? 'Anonymous response' : `${memberLabel(props.member)} · ${props.member.student_id}`}</Caption>
       <h2 id={titleId}>{props.definition.label}</h2>
@@ -46,8 +48,8 @@ export function AnswerDetails({ back, onClose, onDirtyChange, initialDraft, ...p
     </div>
     {/* Separate buttons prevent the Edit click from activating a newly rendered submit action. */}
     {!expired ? <div className="answer-actions">{editing
-      ? <Button key="save" type="submit" form="answer-editor" loading={saving} disabled={saving}>Save</Button>
-      : <Button key="edit" type="button" mode="bezeled" onClick={() => { setDraft(value); setError(''); setEditing(true); }}>Edit</Button>}
+      ? <Button data-analytics="save_answer" key="save" type="submit" form="answer-editor" loading={saving} disabled={saving}>Save</Button>
+      : <Button data-analytics="edit_answer" key="edit" type="button" mode="bezeled" onClick={() => { setDraft(value); setError(''); setEditing(true); }}>Edit</Button>}
     </div> : null}
   </Modal>;
 }

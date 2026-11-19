@@ -19,6 +19,13 @@ in diagnostics, and ongoing incidents do not send periodic reminders. Normal sta
 unavailable Outlook;
 `python main.py --check` still validates Telegram, the database, and Outlook strictly.
 
+Bot-wide UX analytics and the administrator website at `MINI_APP_URL/admin` are documented
+in [analytics.md](docs/analytics.md). Reports cover registration, forms, actions, engagement,
+delivery and problems without collecting answer/message contents. Configure a password with
+`python -m app.analytics.setup --env-file .local/dev/.env`; access then requires that password
+and a one-use Telegram code for an ID in `BOT_ADMIN_IDS`. The private setting is
+`ANALYTICS_ADMIN_PASSWORD_HASH`; `ANALYTICS_RETENTION_DAYS` defaults to 90 days.
+
 ## Before you start
 
 You need:

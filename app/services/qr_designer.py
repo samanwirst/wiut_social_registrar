@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 
+from app.analytics.instrumentation import track
 from app.configuration.qr_images import QrImageSettings
 
 from .qr_art import MAX_IMAGE_BYTES, QrDesignError, styled_qr_images
@@ -242,6 +243,7 @@ class QrDesigner:
         await self.store.clear(owner, event_id)
 
     async def _generate(self, job: QrJob, link: str, prompt: str):
+        started = time.monotonic()
         try:
             async with asyncio.timeout(150):
                 artwork = await self.provider.generate(prompt)
@@ -265,6 +267,14 @@ class QrDesigner:
             if self.health:
                 self.health.incident("qr", error)
             job.status, job.error = "failed", "Could not finish this design. Please try again later"
+        finally:
+            track(
+                "qr_generation",
+                form_id=job.event_id,
+                status=job.status,
+                outcome="ok" if job.status == "ready" else "error",
+                duration_ms=(time.monotonic() - started) * 1000,
+            )
 
     async def close(self):
         self.closed = True

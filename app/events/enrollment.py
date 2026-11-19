@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from sqlalchemy import delete, or_, select, update
 
+from app.analytics.events import record
 from app.clock import utc_now
 from app.event_errors import EventError
 from app.event_forms import validate_answers
@@ -36,6 +37,15 @@ async def enroll(session, insert, user, event_id, now) -> int | None:
     )
     registration_id = result.scalar_one_or_none()
     if registration_id is not None:
+        record(
+            session,
+            "form_completed",
+            at=now,
+            user_id=user.id,
+            form_id=event_id,
+            anonymous=event.anonymous,
+            total=len(event.questions),
+        )
         await session.execute(
             update(Event).where(Event.id == event_id).values(anonymous_locked=True)
         )
@@ -54,8 +64,21 @@ async def existing_registration(session, user, event_id):
     )
 
 
-async def discard_other_pending_events(session, user_id, event_id):
+async def discard_other_pending_events(session, user_id, event_id, *, now=None):
     """Caller holds the user lock and has validated the newly selected event."""
+    previous = await session.get(EventFormSession, user_id)
+    if previous is not None and previous.event_id != event_id:
+        old_event = await session.get(Event, previous.event_id)
+        record(
+            session,
+            "form_switched",
+            at=now or utc_now(),
+            user_id=user_id,
+            form_id=previous.event_id,
+            session_id=previous.analytics_id,
+            anonymous=old_event.anonymous,
+            index=previous.question_index,
+        )
     await session.execute(
         delete(EventFormSession).where(
             EventFormSession.telegram_user_id == user_id,
@@ -135,7 +158,16 @@ class EventEnrollment:
                 raise EventError(
                     f"Registration closed\n\n{event.title}\nThe organizer is no longer accepting responses"
                 )
-            await discard_other_pending_events(session, user_id, event_id)
+            record(
+                session,
+                "form_opened",
+                at=self.clock(),
+                user_id=user_id,
+                form_id=event.id,
+                anonymous=event.anonymous,
+                stage="registered" if registration_complete(user) else "student_id",
+            )
+            await discard_other_pending_events(session, user_id, event_id, now=self.clock())
             registered = registration_complete(user)
             if not registered or (event.questions and existing is None):
                 await session.execute(
