@@ -8,6 +8,8 @@ from app.clock import utc_now
 from app.event_errors import EventError
 from app.event_forms import validate_answers
 from app.events.access import owned_event
+from app.events.selection import member_condition, member_id
+from app.media_answers import MEDIA_QUESTIONS
 from app.models import EventAnswers, EventRegistration, EventTableValues
 from app.table_fields import column_value, validate_columns
 
@@ -59,13 +61,9 @@ class EventTable:
             "columns_revision",
         }:
             raise EventError("Submit one cell with its row and column revisions")
-        if (
-            type(user_id) is not int
-            or not 0 < user_id < 2**63
-            or type(data["revision"]) is not int
-            or type(data["columns_revision"]) is not int
-        ):
+        if type(data["revision"]) is not int or type(data["columns_revision"]) is not int:
             raise EventError("Supply a valid participant and revision")
+        user_id = member_id(user_id)
         scope, key, value = data["scope"], data["field"], data["value"]
         if (
             not isinstance(scope, str)
@@ -81,7 +79,7 @@ class EventTable:
                 select(EventRegistration)
                 .where(
                     EventRegistration.event_id == event_id,
-                    EventRegistration.telegram_user_id == user_id,
+                    member_condition(event, [user_id]),
                 )
                 .with_for_update()
             )
@@ -98,6 +96,8 @@ class EventTable:
                 question = next((q for q in event.questions if q["id"] == key), None)
                 if question is None:
                     raise EventError("Choose a question belonging to this form")
+                if question["type"] in MEDIA_QUESTIONS:
+                    raise EventError("Attachments can only be submitted by the student in chat")
                 if (
                     question["type"] == "multiple_choice"
                     and isinstance(value, list)

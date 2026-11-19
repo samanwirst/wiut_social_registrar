@@ -3,6 +3,7 @@ import re
 from sqlalchemy import delete, select
 
 from app.clock import utc_now
+from app.conversations import cancel_current
 from app.db import Database
 from app.education import EDUCATION_LEVELS
 from app.events.enrollment import enroll_pending_events
@@ -125,6 +126,10 @@ class RegistrationRepository:
                 self._event(session, user_id, "phone_shared", user.outlook_profile_id)
 
     async def complete_registration(self, user_id, education_level: str) -> Student:
+        student, _ = await self.complete_registration_with_events(user_id, education_level)
+        return student
+
+    async def complete_registration_with_events(self, user_id, education_level: str):
         if education_level not in EDUCATION_LEVELS.values():
             raise RegistrationError("Choose CIFS, Level 4, Level 5, or Level 6 using the buttons.")
         async with self.db.transaction(write=True) as session:
@@ -153,8 +158,8 @@ class RegistrationRepository:
             if user.registered_at is None:
                 user.registered_at = now
                 self._event(session, user_id, "registration_completed", profile.id)
-            await enroll_pending_events(session, self.insert, user, now)
-            return profile.student()
+            outcomes = await enroll_pending_events(session, self.insert, user, now)
+            return profile.student(), outcomes
 
     async def cancel(self, user_id):
         async with self.db.transaction(write=True) as session:
@@ -183,6 +188,9 @@ class RegistrationRepository:
                 )
             )
             self._event(session, user_id, "registration_cancelled")
+
+    async def cancel_current(self, user_id):
+        await cancel_current(self.db, user_id, self.clock())
 
     async def event(self, user_id, name, student=None, **details):
         async with self.db.transaction(write=True) as session:

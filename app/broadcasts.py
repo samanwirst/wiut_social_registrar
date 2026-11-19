@@ -36,6 +36,7 @@ class BroadcastRepository:
                 Broadcast.id == draft_id,
                 Broadcast.owner_id == owner,
                 Event.creator_telegram_user_id == owner,
+                Event.anonymous.is_(False),
             )
         )
         draft = await session.scalar(query.with_for_update(of=Broadcast) if lock else query)
@@ -80,7 +81,9 @@ class BroadcastRepository:
             raise EventError(f"Select 1 to {MAX_RECIPIENTS} different people")
         async with self.db.transaction(write=True) as session:
             await self._lock_owner(session, owner)
-            await owned_event(session, owner, event_id, lock=True)
+            event = await owned_event(session, owner, event_id, lock=True)
+            if event.anonymous:
+                raise EventError("Messaging is unavailable for anonymous forms")
             existing = await session.get(Broadcast, draft_id)
             if existing is not None:
                 if existing.owner_id != owner or existing.event_id != event_id:
@@ -154,7 +157,9 @@ class BroadcastRepository:
 
     async def page(self, owner, event_id, page=0, *, completed_only=False):
         async with self.db.transaction() as session:
-            await owned_event(session, owner, event_id)
+            event = await owned_event(session, owner, event_id)
+            if event.anonymous:
+                raise EventError("Messaging is unavailable for anonymous forms")
             condition = (Broadcast.event_id == event_id, Broadcast.owner_id == owner)
             has_active = (
                 await session.scalar(
@@ -217,6 +222,7 @@ class BroadcastRepository:
                     Broadcast.owner_id == owner,
                     Event.creator_telegram_user_id == owner,
                     Broadcast.prompt_message_id == prompt_id,
+                    Event.anonymous.is_(False),
                     Broadcast.status == "composing",
                     Broadcast.expires_at > self.clock(),
                 )

@@ -40,9 +40,23 @@ def utc_timestamp(value):
 
 
 def export_columns(event):
-    columns = [
-        ExportColumn(f"contact:{key}", label, "contact", key, "text") for key, label in CONTACTS
-    ]
+    anonymous = getattr(event, "anonymous", False)
+    columns = (
+        [
+            ExportColumn(
+                "system:response_number",
+                "Response",
+                "system",
+                "response_number",
+                "number",
+                "number_or_text",
+            )
+        ]
+        if anonymous
+        else [
+            ExportColumn(f"contact:{key}", label, "contact", key, "text") for key, label in CONTACTS
+        ]
+    )
     raw_choices = []
     for scope, definitions in (("answer", event.questions), ("column", event.table_columns)):
         for item in definitions:
@@ -71,6 +85,8 @@ def export_columns(event):
                     column, key=f"display:{key}", scope=f"{scope}_display", encoding="lines"
                 )
             columns.append(column)
+    if anonymous:
+        return [*columns, *raw_choices]
     columns.extend(
         ExportColumn(f"system:{key}", label, "system", key, kind, encoding, hidden=True)
         for key, label, kind, encoding in (
@@ -86,6 +102,32 @@ def export_columns(event):
 def export_info(page, exported_at):
     """One key/value table, with descriptions usable without reading the source code."""
     event = page.event
+    if getattr(event, "anonymous", False):
+        return [
+            (
+                "format",
+                "wiut-social-registrar.anonymous-responses",
+                "Anonymous response workbook; not an identified participant list",
+            ),
+            ("schema_version", SCHEMA_VERSION, "Import contract version"),
+            ("export_id", str(uuid4()), "Unique ID for this generated file"),
+            ("exported_at_utc", utc_timestamp(exported_at), "File generation time in UTC"),
+            ("event_id", event.id, "Form UUID"),
+            ("event_title", event.title, "Form name"),
+            (
+                "anonymous",
+                True,
+                "Student identities and contact fields are excluded, including hidden columns",
+            ),
+            ("participant_count", len(page.members), "Number of anonymous responses"),
+            ("export_scope", page.export_scope, "Selected responses or all responses"),
+            (
+                "participants_sheet",
+                "Participants",
+                "Answers and organizer columns only; Response is a row number, not a student ID",
+            ),
+            ("columns_sheet", "Columns", "Column definitions and answer options"),
+        ]
     return [
         ("format", FORMAT, "Workbook format identifier"),
         ("schema_version", SCHEMA_VERSION, "Import contract version"),

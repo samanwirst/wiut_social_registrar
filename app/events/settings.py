@@ -71,6 +71,11 @@ class EventSettingsRepository:
             event = await owned_event(session, user_id, event_id, lock=True)
             if changes.revision != event.revision:
                 raise EventError("This event changed in another window. Reload it before saving.")
+            anonymity_changed = (
+                changes.anonymous is not None and changes.anonymous != event.anonymous
+            )
+            if anonymity_changed and event.anonymous_locked:
+                raise EventError("Anonymous can only be changed before the first registration")
             if event.form_locked and questions != event.questions:
                 raise EventError(
                     "Questions are locked after the first submission to preserve answer meanings."
@@ -83,8 +88,10 @@ class EventSettingsRepository:
                 event.department = changes.department
             event.registration_open = changes.registration_open
             event.response_retention_days = retention
-            if event.questions != questions:
+            if event.questions != questions or anonymity_changed:
                 event.form_revision += 1
+            if changes.anonymous is not None:
+                event.anonymous = changes.anonymous
             event.questions = questions
             event.revision += 1
         return event

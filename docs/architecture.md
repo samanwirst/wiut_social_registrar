@@ -30,6 +30,8 @@ preserves their public commands, API payloads, configuration, and database schem
 | Shared pagination bounds | `app/pagination.py` |
 | Question definitions, answer validation, and answer transitions | `app/event_forms.py` |
 | Persistent questionnaire progress | `app/surveys.py` |
+| Bounded Telegram attachment metadata and owner-only retrieval | `app/media_answers.py`, `app/events/media.py` |
+| Atomic cancellation of unfinished chat flows | `app/conversations.py` |
 | HTTP application wiring | `app/miniapp/application.py` |
 | Signed Telegram authentication | `app/miniapp/auth.py` |
 | HTTP input/output, headers, and static allowlist | `app/miniapp/routes.py`, `middleware.py`, `assets.py` |
@@ -93,12 +95,56 @@ default to 30 days. Expired answers are filtered on reads and physically deleted
 and every ten minutes. The cleanup service runs without an HTTP server. It does not delete
 profiles, attendance, or analytics, and answer contents never enter those permanent tables.
 
+Media references live in the same temporary draft/answer JSON as text, without a schema
+change. Only Telegram messages can create them: direct form submission and organizer cell
+editing reject media references. Public projections remove Telegram file IDs. Owner-scoped
+`file_<registration>_<question>` bot links recheck ownership and answer expiry before sending
+the original media type. No file bytes are downloaded and no token-bearing URLs are exposed.
+Albums are rejected before advancing a question. All existing final-answer transaction rules
+and cleanup behavior apply to media.
+
+`/cancel` takes the user lock and clears unfinished identity fields, challenges, pending
+invitations, form drafts and unconfirmed composition in one transaction. Completed profiles,
+attendance, final answers and email quotas stay intact. Confirmed deliveries are not stopped.
+FSM cleanup and keyboard removal happen after commit; stale buttons cannot recreate the flow.
+
 `BotApp` owns all runtime resources. Shutdown uses `AsyncExitStack` to close every resource
 even when another close fails. HTTP startup cleans up its runner on bind/setup failures or
 cancellation. Cleanup task cancellation and HTTP close are repeatable.
 After polling stops, the update-drain middleware waits for active chat handlers, including
 updates queued on a student's isolation lock, before database and network clients close.
 Already committed registration stages and questionnaire tokens remain in the database.
+
+## Anonymous forms
+
+Migration `0009_anonymous_forms` adds off-by-default anonymity and an irreversible first-
+registration lock to events, plus an optional random UUID on anonymous attendance rows.
+Existing events remain identified and existing registrations backfill the lock. Changing
+anonymity before the first submission advances the form revision so old drafts must restart.
+Setting changes and enrollment share the event lock; a racing submission cannot bypass it.
+Internal Telegram/profile keys and existing uniqueness constraints still enforce one response.
+
+Organizer projections lock the event while choosing their identity mode and reading rows;
+SQLite uses `BEGIN IMMEDIATE` for these reads to prevent a mode-change/first-response race.
+Anonymous projections do not join profile tables. They expose only a random response UUID,
+answers, custom values and editing state. They omit registration IDs, profile/contact fields,
+and timestamp values. Selection and edits validate UUIDs against the owned anonymous form;
+numeric Telegram IDs cannot select an anonymous row. Final answers and attendance still commit
+atomically. Owner-scoped media links encode only random response/question UUIDs, return no
+student identifier and reject the legacy registration-ID link shape for anonymous forms.
+
+Anonymous exports contain response numbers, answers and custom columns. Their distinct format
+excludes all identified-contact/system columns, including hidden IDs. Broadcast creation and
+reads reject anonymous events independently of the UI. The service retains internal identity
+for deduplication; this is anonymity to organizers, not unlinkability against database operators.
+Answer/file contents may themselves contain details provided by the participant.
+
+Anonymity cannot be changed after the first enrollment, even after answers expire. Do not run
+older, anonymity-unaware application images against a database containing anonymous forms.
+The migration blocks schema downgrades while any anonymous form exists.
+
+Profile completion returns pending enrollment outcomes from its own transaction. Closed forms
+are reported separately rather than being included in a successful participation message.
 
 ## Graph and console
 

@@ -123,9 +123,9 @@ contact, and education level. Messages use ordinary Telegram entities for headin
 copyable IDs; student names and event text stay literal.
 
 The native **Menu** button adapts to the user. Before registration it offers `/start`,
-`/resend`, `/help` and `/info`. Registered students see `/new_form`, `/me`, `/help` and
+`/resend`, `/cancel`, `/help` and `/info`. Registered students see `/new_form`, `/me`, `/cancel`, `/help` and
 `/info`; `/panel` appears after creating a form only for its organizers when the panel is
-configured. `/me` sits immediately before `/help`, and `/info` is last. Role changes update the menu
+configured. `/me` is followed by `/cancel` and `/help`, with `/info` last. Role changes update the menu
 immediately. Updates are cached with bounded memory, and a failed menu update does not
 block registration. Groups do not inherit the private-chat command list.
 
@@ -195,9 +195,9 @@ The Mini App becomes available only after a student **successfully creates their
 
 The organizer workspace provides:
 
-- Form name, department, description, and an open/closed registration switch.
+- Form name, department, description, **Accept registrations**, and **Anonymous** switches. Anonymous defaults to off and can only change before the first registration; this is enforced on the server as well.
 - A dedicated **QR** tab with a copyable registration link and **Send QR to chat**. The bot sends the original **PNG** document, preserving quality and transparency. Choose a transparent or opaque background, or describe a custom AI design. QR images load only when this tab is opened; the other pages focus on editing and participants.
-- Up to **20 questions**, with **Text response (TR)** and **Multiple choice (MC)** answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
+- Up to **20 questions**, with text, multiple choice, photo, file, voice message, video, audio, GIF, video message or any-attachment answer types. Questions can be reordered, made optional, or removed before the first questionnaire is submitted. Choice answers use individual fields with **Add option** and remove controls, like Telegram polls. Each choice question accepts 2–20 unique options of up to 100 characters; Enter moves to the next option or adds a new one.
 - A People table with **10 rows per page**, contact details, Level, editable response cells, organizer columns, and multi-page audience selection. **Refresh** fetches current answers. Answers expire automatically according to the form's retention period.
 - **Export .xlsx** sends the selected participants to your private bot chat in one Excel workbook, including contacts, Level, current answers, and organizer columns. The file has filters and frozen headers; student IDs keep leading zeroes and long answers are exported in full. Use the header checkbox to select everyone across all pages, or mark individual rows; the button stays disabled until at least one participant is selected and is available only to the form owner. Both file buttons open the bot chat without closing the panel on Telegram 7.0+; generation and sending continue on the server when the panel is minimized.
 - Workbooks include readable **Export info** and **Columns** sheets for integration with other systems: event UUID, file UUID, format version, UTC timestamps, selection scope, stable field keys and types. Participant IDs stay in hidden columns of the same table. See the [workbook import contract](docs/participant-export.md).
@@ -206,6 +206,34 @@ The organizer workspace provides:
 Set up questions **before sharing the QR code**. Forms start open and have no questions, preserving immediate enrollment until questions are added. Students who already submitted are not asked to submit again; any extra answer cells show a dash.
 
 Students fill questionnaires **inside the bot chat**, not in the Mini App. The bot sends one question at a time. Text and number questions accept a message; choice questions save the selected inline option and immediately advance, without checkmarks or a **Continue** step. Optional questions have **Skip**. `/start` restores progress. Opening another form QR immediately leaves the unfinished form and starts the selected one; earlier draft answers are discarded and its old inline buttons cannot answer the new questionnaire. Reopening the same form preserves progress. An invalid or closed form link leaves the current questionnaire intact.
+
+Attachment questions accept **one Telegram attachment per question**; albums and the wrong
+media type leave the current question unchanged. Caption text is retained with the attachment.
+The People table's **Open in Telegram** action sends it to the form owner after checking
+ownership and answer expiry again. Attachments are read-only in the table. The bot stores
+temporary Telegram file references rather than downloading files; file IDs and token-bearing
+download URLs are never exposed to the panel or workbooks. Excel includes the filename/type
+and caption. References expire with other form answers. See [Telegram's file reuse API](https://core.telegram.org/bots/api#sending-files).
+
+`/cancel` discards unfinished verification, pending form invitations, questionnaire answers
+and unconfirmed message composition, then removes the contact keyboard. It preserves
+completed profiles, completed submissions, rate limits and already confirmed deliveries.
+Old verification codes, question buttons and cancelled message previews cannot resume the
+cancelled flow. Use `/start` or scan the form's QR to begin again.
+
+**Anonymous forms** show organizers only responses and their own custom columns. Student ID,
+Telegram ID, name, username, email, phone, education level and precise response timestamps
+are excluded from the API and workbook, including hidden columns. The bot retains the
+internal account association to prevent repeat submissions; organizers receive random,
+form-local response keys for selection and editing. Anonymous workbooks use the separate
+`wiut-social-registrar.anonymous-responses` format and cannot be imported as identified
+participant lists. Messaging is unavailable for anonymous forms. Media opens without a
+student identifier or forwarding attribution. Anonymity hides the saved profile; participants'
+answer text and uploaded file contents are shared as submitted.
+
+Closing a form rejects new scans and unfinished form submissions with **Registration closed**.
+If the organizer closes it while a student is verifying their profile, the profile can still
+be completed, but the bot reports that the form is closed and does not claim participation.
 
 Choice answers retain their existing storage format. Previously saved selections and questionnaire tokens survive upgrades; options and **Continue** buttons from the old multi-select UI remain valid for the current question. Choosing an option preserves earlier selections for that question and advances immediately. No migration or form-revision change is needed.
 

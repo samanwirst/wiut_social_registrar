@@ -6,6 +6,9 @@ import { Chevron, PlusIcon } from './Icons';
 
 const types: [QuestionType, string][] = [
   ['text', 'Text response'], ['multiple_choice', 'Multiple choice'],
+  ['photo', 'Photo'], ['document', 'File'], ['voice', 'Voice message'],
+  ['video', 'Video'], ['audio', 'Audio'], ['animation', 'GIF'],
+  ['video_note', 'Video message'], ['media', 'Any attachment'],
 ];
 
 export function Questions({ questions, locked, disabled, onChange }: {

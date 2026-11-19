@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import { Button, Caption, Checkbox, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
 import { api, errorMessage } from './api';
 import { EditableCell } from './EditableCell';
+import { MediaCell, mediaTypes } from './MediaCell';
 import { TableColumns } from './TableColumns';
 import { Broadcasts } from './Broadcasts';
 import { AnswerDetails } from './AnswerDetails';
@@ -10,21 +11,22 @@ import { openTelegramChat } from './telegram';
 import { useRemoteResource } from './hooks/useRemoteResource';
 import { Pagination } from './Pagination';
 import { ExportParticipants } from './ExportParticipants';
-import type { Broadcast, CellChange, MembersPage } from './types';
+import type { Broadcast, CellChange, MediaAnswer, MemberId, MembersPage } from './types';
+import { memberId, memberLabel } from './types';
 
-function Contact({ value, prefix }: { value: string | null; prefix: string }) {
+function Contact({ value, prefix }: { value?: string | null; prefix: string }) {
   return value ? <a href={prefix + value} target="_blank" rel="noopener noreferrer">{value}</a> : <>—</>;
 }
 
 export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: string; detailBack: MutableRefObject<(() => void) | null>; onDirtyChange: (dirty: boolean) => void }) {
   const [page, setPage] = useState(0);
-  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [selected, setSelected] = useState<Set<MemberId>>(() => new Set());
   const [preparing, setPreparing] = useState(false);
   const [composeError, setComposeError] = useState('');
-  const [detail, setDetail] = useState<{ memberId: number; fieldId: string; scope: 'answer' | 'column'; initialDraft?: string } | null>(null);
+  const [detail, setDetail] = useState<{ memberId: MemberId; fieldId: string; scope: 'answer' | 'column'; initialDraft?: string } | null>(null);
   const detailOpener = useRef<HTMLTableCellElement | null>(null);
   const closeDetail = useCallback(() => setDetail(null), []);
-  const openDetail = (memberId: number, fieldId: string, scope: 'answer' | 'column', initialDraft?: string) => {
+  const openDetail = (memberId: MemberId, fieldId: string, scope: 'answer' | 'column', initialDraft?: string) => {
     detailOpener.current = document.activeElement?.closest<HTMLTableCellElement>('td') ?? null;
     setDetail({ memberId, fieldId, scope, initialDraft });
   };
@@ -36,10 +38,10 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
   const load = useCallback((signal: AbortSignal) =>
     api<MembersPage>(`/api/forms/${encodeURIComponent(eventId)}/members?page=${page}`, { signal }), [eventId, page]);
   const { data, loading, error, reload, update } = useRemoteResource(load);
-  const changeSelection = (next: Set<number>) => { setSelected(next); setComposeError(''); };
+  const changeSelection = (next: Set<MemberId>) => { setSelected(next); setComposeError(''); };
   const prepare = async () => {
-    if (pending.current || selected.size === 0) return;
-    const ids = [...selected].sort((a, b) => a - b);
+    if (pending.current || selected.size === 0 || data?.anonymous) return;
+    const ids = [...selected].sort((a, b) => String(a).localeCompare(String(b)));
     const audience = ids.join(',');
     if (request.current.audience !== audience) request.current = { id: crypto.randomUUID(), audience };
     pending.current = true; setPreparing(true); setComposeError('');
@@ -51,20 +53,20 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     } catch (failure) { setComposeError(errorMessage(failure)); }
     finally { pending.current = false; setPreparing(false); }
   };
-  const cellSaved = (id: number, change: CellChange) => update(previous => previous ? ({ ...previous,
-    members: previous.members.map(member => member.telegram_id !== id ? member : ({ ...member, row_revision: change.revision,
+  const cellSaved = (id: MemberId, change: CellChange) => update(previous => previous ? ({ ...previous,
+    members: previous.members.map(member => memberId(member) !== id ? member : ({ ...member, row_revision: change.revision,
       ...(change.scope === 'answer' ? { answers: { ...member.answers, [change.field]: change.value as string | string[] } }
         : { organizer_values: { ...member.organizer_values, [change.field]: change.value } }),
     })),
   }) : previous);
   const allSelected = Boolean(data?.member_ids.length && data.member_ids.every(id => selected.has(id)));
   const partiallySelected = !allSelected && Boolean(data?.member_ids.some(id => selected.has(id)));
-  const detailMember = data?.members.find(member => member.telegram_id === detail?.memberId);
+  const detailMember = data?.members.find(member => memberId(member) === detail?.memberId);
   const detailField = detail && (detail.scope === 'answer' ? data?.questions : data?.columns)?.find(field => field.id === detail.fieldId);
 
-  return <><Section className="studio-section participants" header="People" footer="Tap answers or custom values to view or edit">
+  return <><Section className="studio-section participants" header={data?.anonymous ? 'Responses' : 'People'} footer="Tap answers or custom values to view or edit">
     <div className="table-tools">
-      <Caption>{data?.total ?? '…'} people · 10 per page</Caption>
+      <Caption>{data?.total ?? '…'} {data?.anonymous ? data.total === 1 ? 'response' : 'responses' : data?.total === 1 ? 'person' : 'people'} · 10 per page</Caption>
       <div className="actions">
         <Button type="button" size="s" mode="bezeled" disabled={loading} onClick={reload}>Refresh</Button>
       </div>
@@ -72,36 +74,38 @@ export function Participants({ eventId, detailBack, onDirtyChange }: { eventId: 
     {data ? <TableColumns formId={eventId} columns={data.columns} revision={data.columns_revision} onChanged={reload} /> : null}
     <div className="audience-tools">
       <Caption role="status">{selected.size} selected{selected.size ? ' across pages' : ''}</Caption>
-      <div className="actions"><Button type="button" size="s" mode="bezeled" disabled={!selected.size || preparing} loading={preparing} onClick={() => { void prepare(); }}>Prepare message</Button>
+      <div className="actions">{!data?.anonymous ? <Button type="button" size="s" mode="bezeled" disabled={!selected.size || preparing} loading={preparing} onClick={() => { void prepare(); }}>Prepare message</Button> : null}
         <ExportParticipants key={eventId} eventId={eventId} selected={selected} disabled={preparing} /></div>
       {composeError ? <Caption role="alert" className="danger">{composeError}</Caption> : null}
     </div>
     {error ? <Placeholder header="Couldn't load people" description={error} action={
       <Button type="button" mode="bezeled" onClick={reload}>Try again</Button>} />
       : loading ? <div className="loading" role="status"><Spinner size="m" /><span>Loading participants…</span></div>
-      : data && data.members.length ? <div className="scroll-table" tabIndex={0} role="region" aria-label="Participant contacts and answers">
-        <table><thead><tr><th scope="col" className="selection-cell"><Checkbox aria-label="Select all participants" aria-checked={partiallySelected ? 'mixed' : allSelected} checked={allSelected} indeterminate={partiallySelected} disabled={preparing} onChange={e => {
+      : data && data.members.length ? <div className="scroll-table" tabIndex={0} role="region" aria-label={data.anonymous ? 'Anonymous answers' : 'Participant contacts and answers'}>
+        <table><thead><tr><th scope="col" className="selection-cell"><Checkbox aria-label={data.anonymous ? 'Select all responses' : 'Select all participants'} aria-checked={partiallySelected ? 'mixed' : allSelected} checked={allSelected} indeterminate={partiallySelected} disabled={preparing} onChange={e => {
           changeSelection(new Set(e.target.checked ? data.member_ids : []));
-        }} /></th>{['Student ID', 'Name', 'Telegram', 'Email', 'Phone', 'Level', ...data.questions.map(q => q.label), ...data.columns.map(c => c.label)]
+        }} /></th>{[...(data.anonymous ? [] : ['Student ID', 'Name', 'Telegram', 'Email', 'Phone', 'Level']), ...data.questions.map(q => q.label), ...data.columns.map(c => c.label)]
           .map((label, index) => <th scope="col" key={index}>{label}</th>)}</tr></thead>
-          <tbody>{data.members.map(member => <tr key={member.telegram_id}>
-            <td className="selection-cell"><Checkbox aria-label={`Select ${member.name || member.student_id}`} checked={selected.has(member.telegram_id)} disabled={preparing} onChange={e => {
-              const next = new Set(selected); if (e.target.checked) next.add(member.telegram_id); else next.delete(member.telegram_id); changeSelection(next);
+          <tbody>{data.members.map(member => <tr key={memberId(member)}>
+            <td className="selection-cell"><Checkbox aria-label={`Select ${memberLabel(member)}`} checked={selected.has(memberId(member))} disabled={preparing} onChange={e => {
+              const next = new Set(selected); if (e.target.checked) next.add(memberId(member)); else next.delete(memberId(member)); changeSelection(next);
             }} /></td>
-            <td>{member.student_id}</td><td>{member.name}</td>
+            {!data.anonymous ? <><td>{member.student_id}</td><td>{member.name}</td>
             <td>{member.telegram_username ? <a href={`https://t.me/${member.telegram_username}`} target="_blank" rel="noopener noreferrer">@{member.telegram_username}</a>
               : <a href={`tg://user?id=${member.telegram_id}`}>Open profile</a>}</td>
             <td><Contact value={member.email} prefix="mailto:" /></td>
-            <td><Contact value={member.phone_number} prefix="tel:" /></td><td>{member.education_level || '—'}</td>
-            {data.questions.map(q => <EditableCell key={q.id} formId={eventId} member={member} definition={q} scope="answer" columnsRevision={data.columns_revision} onSaved={cellSaved}
-              onExpand={initialDraft => openDetail(member.telegram_id, q.id, 'answer', initialDraft)} />)}
+            <td><Contact value={member.phone_number} prefix="tel:" /></td><td>{member.education_level || '—'}</td></> : null}
+            {data.questions.map(q => mediaTypes.has(q.type)
+              ? <MediaCell key={q.id} value={(member.answers?.[q.id] as MediaAnswer | undefined) ?? null} />
+              : <EditableCell key={q.id} formId={eventId} member={member} definition={q} scope="answer" columnsRevision={data.columns_revision} onSaved={cellSaved}
+                onExpand={initialDraft => openDetail(memberId(member), q.id, 'answer', initialDraft)} />)}
             {data.columns.map(c => <EditableCell key={c.id} formId={eventId} member={member} definition={c} scope="column" columnsRevision={data.columns_revision} onSaved={cellSaved}
-              onExpand={initialDraft => openDetail(member.telegram_id, c.id, 'column', initialDraft)} />)}
+              onExpand={initialDraft => openDetail(memberId(member), c.id, 'column', initialDraft)} />)}
           </tr>)}</tbody></table>
       </div> : <Placeholder header="No responses yet" description="Share the form's QR code or link to invite people" />}
     {data ? <Pagination {...data} disabled={loading} onPage={setPage} /> : null}
   </Section>
-    <Broadcasts formId={eventId} />
+    {data && !data.anonymous ? <Broadcasts formId={eventId} /> : null}
     {detail && detailMember && detailField && data ? <AnswerDetails key={`${detail.memberId}:${detail.fieldId}:${detail.scope}`} formId={eventId}
       member={detailMember} definition={detailField} scope={detail.scope} columnsRevision={data.columns_revision} onSaved={cellSaved}
       initialDraft={detail.initialDraft} back={detailBack} onClose={closeDetail} onDirtyChange={onDirtyChange} /> : null}

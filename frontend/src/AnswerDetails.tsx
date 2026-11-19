@@ -5,6 +5,7 @@ import { CloseIcon } from './Icons';
 import { CELL_TEXT_LIMIT, useCellEditor } from './hooks/useCellEditor';
 import type { CellEditorProps } from './hooks/useCellEditor';
 import { useVisualViewport } from './hooks/useVisualViewport';
+import { memberLabel } from './types';
 
 export function AnswerDetails({ back, onClose, onDirtyChange, initialDraft, ...props }: CellEditorProps & {
   back: MutableRefObject<(() => void) | null>; onClose: () => void; onDirtyChange: (dirty: boolean) => void; initialDraft?: string;
@@ -33,7 +34,7 @@ export function AnswerDetails({ back, onClose, onDirtyChange, initialDraft, ...p
     <div className="answer-header"><span>{props.scope === 'answer' ? 'Answer' : 'Value'}</span>
       <IconButton type="button" mode="plain" size="s" aria-label="Close answer" disabled={saving} onClick={close}><CloseIcon /></IconButton></div>
     <div className="answer-content" data-vaul-no-drag>
-      <Caption id={personId} className="muted">{props.member.name} · {props.member.student_id}</Caption>
+      <Caption id={personId} className="muted">{props.member.response_id ? 'Anonymous response' : `${memberLabel(props.member)} · ${props.member.student_id}`}</Caption>
       <h2 id={titleId}>{props.definition.label}</h2>
       {editing ? <form id="answer-editor" aria-label="Edit full answer" onSubmit={async event => {
         event.preventDefault(); if (await save()) setEditing(false);
